@@ -25,10 +25,14 @@ app.use((req, res, next) => {
 
 // CORS configuration
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production' ? ['https://artalyze.app'] : ['http://localhost:3000', 'http://localhost:3001'],
+    origin: process.env.NODE_ENV === 'production' ? 
+        ['https://artalyze.app', 'https://artalyze-admin.vercel.app'] 
+        : ['http://localhost:3000', 'http://localhost:3001'],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
 }));
+
 
 // Middleware to parse JSON and URL-encoded data
 app.use(express.json());
