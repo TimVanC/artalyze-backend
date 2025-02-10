@@ -8,15 +8,14 @@ const imageRoutes = require('./routes/imageRoutes'); // Image upload routes
 const adminRoutes = require('./routes/adminRoutes'); // Admin-related routes for image pairs
 const statsRoutes = require('./routes/statsRoutes'); // Stats-related routes
 const userRoutes = require('./routes/userRoutes');
+const connectDB = require('./config/db'); // Database connection function
 
-// Health check route
+const app = express(); // ✅ Express app is initialized before routes
+
+// ✅ Health check route (Placed correctly)
 app.get("/", (req, res) => {
     res.json({ message: "Backend is running successfully!" });
 });
-
-const connectDB = require('./config/db'); // Database connection function
-
-const app = express();
 
 // Middleware for request logging
 app.use((req, res, next) => {
@@ -65,7 +64,7 @@ app.use('/api/admin', adminRoutes);
 console.log('Mounting statsRoutes at /api/stats');
 app.use('/api/stats', statsRoutes);
 
-console.log('Mounting statsRoutes at /api/user');
+console.log('Mounting userRoutes at /api/user'); // Fixed logging
 app.use('/api/user', userRoutes);
 
 // Error handling middleware
