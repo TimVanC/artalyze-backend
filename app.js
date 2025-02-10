@@ -9,6 +9,11 @@ const adminRoutes = require('./routes/adminRoutes'); // Admin-related routes for
 const statsRoutes = require('./routes/statsRoutes'); // Stats-related routes
 const userRoutes = require('./routes/userRoutes');
 
+// Health check route
+app.get("/", (req, res) => {
+    res.json({ message: "Backend is running successfully!" });
+});
+
 const connectDB = require('./config/db'); // Database connection function
 
 const app = express();
