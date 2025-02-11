@@ -1,6 +1,6 @@
 // controllers/adminController.js
 
-const ImagePair = require('../models/ImagePairs');
+const ImagePair = require('../models/ImagePair');
 const path = require('path');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
