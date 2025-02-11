@@ -71,35 +71,27 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
       return res.status(500).json({ error: 'Failed to retrieve image URLs from Cloudinary' });
     }
 
-    // Check if a document for the scheduled date exists
-    let imagePairDocument = await ImagePair.findOne({ scheduledDate: date });
-    if (imagePairDocument) {
-      // Update existing image pair
-      imagePairDocument.pairs[pairIndex] = {
-        humanImageURL: humanUploadResult.secure_url,
-        aiImageURL: aiUploadResult.secure_url,
-      };
-    } else {
-      // Create new document
-      imagePairDocument = new ImagePair({
-        scheduledDate: date,
-        pairs: [{
-          humanImageURL: humanUploadResult.secure_url,
-          aiImageURL: aiUploadResult.secure_url,
-        }],
-        status: 'pending'
-      });
-    }
+    // Update the database: Use `findOneAndUpdate()` with `$push`
+    const updateResult = await ImagePair.findOneAndUpdate(
+      { scheduledDate: date }, // Find the document by date
+      {
+        $push: { 
+          pairs: {
+            humanImageURL: humanUploadResult.secure_url,
+            aiImageURL: aiUploadResult.secure_url,
+          } 
+        },
+      },
+      { upsert: true, new: true }
+    );
 
-    await imagePairDocument.save();
-    res.json({ message: 'Image pair uploaded successfully', data: imagePairDocument });
+    res.json({ message: 'Image pair uploaded successfully', data: updateResult });
 
   } catch (error) {
     console.error('Upload Error:', error);
     res.status(500).json({ error: 'Failed to upload image pair' });
   }
 });
-
 
 // Add this route to `adminRoutes.js`
 exports.getImagePairsByDate = async (req, res) => {
