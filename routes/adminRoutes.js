@@ -71,35 +71,21 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
     let imagePairDocument = await ImagePair.findOne({ scheduledDate: date });
     
     if (imagePairDocument) {
-      // Update an existing pair by its pair index
-      if (imagePairDocument.pairs && imagePairDocument.pairs[pairIndex]) {
-        imagePairDocument.pairs[pairIndex] = {
-          humanImageURL: humanUploadResult.secure_url,
-          aiImageURL: aiUploadResult.secure_url
-        };
-      } else {
-        // If the pair index doesn't exist, add it as a new pair
-        imagePairDocument.pairs.push({
-          humanImageURL: humanUploadResult.secure_url,
-          aiImageURL: aiUploadResult.secure_url
-        });
-      }
-      
-      await imagePairDocument.save();
-      res.json({ message: 'Image pair updated successfully', data: imagePairDocument });
-    } else {
-      // Create a new entry for the date if no existing document
-      imagePairDocument = new ImagePair({
-        scheduledDate: date,
-        pairs: [{
-          humanImageURL: humanUploadResult.secure_url,
-          aiImageURL: aiUploadResult.secure_url
-        }],
-        status: 'pending'
-      });
-      await imagePairDocument.save();
-      res.json({ message: 'Image pair uploaded successfully', data: imagePairDocument });
+      // Use MongoDB `$set` to update specific pair index, avoiding VersionError
+      const updatedDocument = await ImagePair.findOneAndUpdate(
+        { scheduledDate: date },
+        {
+          $set: {
+            [`pairs.${pairIndex}.humanImageURL`]: humanUploadResult.secure_url,
+            [`pairs.${pairIndex}.aiImageURL`]: aiUploadResult.secure_url,
+          },
+        },
+        { new: true, upsert: true }
+      );
+    
+      res.json({ message: 'Image pair updated successfully', data: updatedDocument });
     }
+    
   } catch (error) {
     console.error('Upload Error:', error);
     res.status(500).json({ error: 'Failed to upload image pair' });

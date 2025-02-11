@@ -33,7 +33,6 @@ app.use(cors({
     credentials: true
 }));
 
-
 // Middleware to parse JSON and URL-encoded data
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -77,11 +76,16 @@ app.use((err, req, res, next) => {
     res.status(500).send({ message: 'An error occurred. Please try again later.' });
 });
 
-// Serve frontend in production
+// Ensure API routes are processed before serving frontend
 if (process.env.NODE_ENV === 'production') {
+    app.use('/api/admin', adminRoutes); // ✅ Admin API routes before serving frontend
     app.use(express.static(path.join(__dirname, '../artalyze-user/build')));
     app.get('*', (req, res) => {
-        res.sendFile(path.resolve(__dirname, '../artalyze-user', 'build', 'index.html'));
+        if (req.path.startsWith('/api/')) {
+            res.status(404).json({ error: 'API route not found' }); // ✅ Prevents frontend from catching API 404 errors
+        } else {
+            res.sendFile(path.resolve(__dirname, '../artalyze-user', 'build', 'index.html'));
+        }
     });
 }
 
