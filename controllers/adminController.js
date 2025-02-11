@@ -67,12 +67,26 @@ exports.uploadDayPuzzle = async (req, res) => {
 
 // Get image pairs by date
 exports.getImagePairsByDate = async (req, res) => {
-  const { date } = req.params;
-
   try {
-    const imagePair = await ImagePair.findOne({ date });
+    const { date } = req.params;
+    if (!date) {
+      return res.status(400).json({ error: 'Date parameter is required' });
+    }
+
+    // Convert the date string to a proper UTC date range
+    const queryStart = new Date(date);
+    queryStart.setUTCHours(0, 0, 0, 0); // Start of day UTC
+
+    const queryEnd = new Date(queryStart);
+    queryEnd.setUTCHours(23, 59, 59, 999); // End of day UTC
+
+    // Find image pairs within this date range
+    const imagePair = await ImagePair.findOne({
+      scheduledDate: { $gte: queryStart, $lte: queryEnd }
+    });
+
     if (!imagePair) {
-      return res.status(404).json([]);
+      return res.status(404).json({ error: 'No image pairs found for this date' });
     }
 
     res.status(200).json(imagePair.pairs);

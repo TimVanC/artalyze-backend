@@ -93,19 +93,25 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
   }
 });
 
-// Add this route to `adminRoutes.js`
-exports.getImagePairsByDate = async (req, res) => {
+router.get('/get-image-pairs-by-date/:date', async (req, res) => {
   try {
     const { date } = req.params;
     if (!date) {
       return res.status(400).json({ error: 'Date parameter is required' });
     }
 
-    // Convert the date to match MongoDB storage
-    const queryDate = new Date(date);
-    queryDate.setUTCHours(5, 0, 0, 0); // Ensure correct timezone
+    // Convert date string to UTC range for the full day
+    const queryStart = new Date(date);
+    queryStart.setUTCHours(0, 0, 0, 0); // Start of day UTC
 
-    const imagePairs = await ImagePair.findOne({ scheduledDate: queryDate });
+    const queryEnd = new Date(queryStart);
+    queryEnd.setUTCHours(23, 59, 59, 999); // End of day UTC
+
+    // Find the image pair within this date range
+    const imagePairs = await ImagePair.findOne({
+      scheduledDate: { $gte: queryStart, $lte: queryEnd }
+    });
+
     if (!imagePairs) {
       return res.status(404).json({ error: 'No image pairs found for this date' });
     }
@@ -115,8 +121,6 @@ exports.getImagePairsByDate = async (req, res) => {
     console.error('Error fetching image pairs:', error);
     res.status(500).json({ message: 'Failed to fetch image pairs' });
   }
-};
-
-
+});
 
 module.exports = router;
