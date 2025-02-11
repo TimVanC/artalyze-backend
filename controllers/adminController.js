@@ -3,6 +3,28 @@
 const ImagePair = require('../models/ImagePairs');
 const path = require('path');
 const fs = require('fs');
+const jwt = require('jsonwebtoken');
+
+exports.adminLogin = async (req, res) => {
+  const { email, password } = req.body;
+  
+  // Load admin credentials from .env
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (email !== adminEmail || password !== adminPassword) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+  }
+
+  // Generate JWT
+  const token = jwt.sign(
+      { role: 'admin' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+  );
+
+  res.json({ token });
+};
 
 // Upload image pairs for a specific day
 exports.uploadDayPuzzle = async (req, res) => {

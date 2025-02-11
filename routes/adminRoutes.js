@@ -6,6 +6,7 @@ const ImagePair = require('../models/ImagePair');
 const { authenticateToken, authorizeAdmin } = require('../middleware/authMiddleware');
 const router = express.Router();
 const streamifier = require('streamifier');
+const adminController = require('../controllers/adminController');
 
 // Multer setup for file handling (store in memory)
 const storage = multer.memoryStorage();
@@ -31,10 +32,12 @@ const uploadToCloudinary = (fileBuffer, folderName) => {
         }
       }
     );
-
     streamifier.createReadStream(fileBuffer).pipe(uploadStream);
   });
 };
+
+// Admin authentication route
+router.post('/login', adminController.adminLogin);
 
 // POST endpoint for uploading or updating an image pair
 router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name: 'aiImage' }]), async (req, res) => {
@@ -43,7 +46,7 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
     if (!scheduledDate) {
       return res.status(400).json({ error: 'Scheduled date must be provided.' });
     }
-
+    
     const date = new Date(scheduledDate);
     // Set to 12:00 AM EST (or EDT depending on the season)
     const isDaylightSaving = date.getMonth() >= 2 && date.getMonth() <= 10; // March to November
@@ -52,21 +55,21 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
     } else {
       date.setUTCHours(5, 0, 0, 0); // 5:00 AM UTC for EST
     }
-
+    
     // Upload images to Cloudinary
     const humanImage = req.files['humanImage']?.[0];
     const aiImage = req.files['aiImage']?.[0];
-
+    
     if (!humanImage || !aiImage) {
       return res.status(400).json({ error: 'Both images must be provided.' });
     }
-
+    
     const humanUploadResult = await uploadToCloudinary(humanImage.buffer, 'artalyze/humanImages');
     const aiUploadResult = await uploadToCloudinary(aiImage.buffer, 'artalyze/aiImages');
-
+    
     // Check if an entry for the scheduled date already exists
     let imagePairDocument = await ImagePair.findOne({ scheduledDate: date });
-
+    
     if (imagePairDocument) {
       // Update an existing pair by its pair index
       if (imagePairDocument.pairs && imagePairDocument.pairs[pairIndex]) {
@@ -102,35 +105,5 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
     res.status(500).json({ error: 'Failed to upload image pair' });
   }
 });
-
-// GET endpoint to retrieve image pairs for a specific date
-router.get('/get-image-pairs-by-date/:scheduledDate', async (req, res) => {
-  try {
-    const { scheduledDate } = req.params;
-    console.log("Received request for image pairs on date:", scheduledDate);
-
-    // Parse the date and normalize to UTC midnight
-    const selectedDate = new Date(scheduledDate);
-    selectedDate.setUTCHours(5, 0, 0, 0); // Match frontend normalization to 05:00 UTC
-
-    console.log("Searching for image pairs with date (UTC):", selectedDate.toISOString());
-
-    // Query the database using the normalized date
-    const imagePairs = await ImagePair.findOne({ scheduledDate: selectedDate.toISOString() });
-
-    if (!imagePairs) {
-      console.log("No existing image pairs found for this date:", selectedDate.toISOString());
-      res.status(404).json({ message: 'No existing image pairs found for this date.' });
-    } else {
-      console.log("Found image pairs:", imagePairs);
-      res.status(200).json(imagePairs);
-    }
-  } catch (error) {
-    console.error('Error fetching image pairs:', error);
-    res.status(500).json({ error: 'Failed to fetch image pairs' });
-  }
-});
-
-
 
 module.exports = router;
