@@ -39,84 +39,92 @@ const uploadToCloudinary = (fileBuffer, folderName) => {
 // Admin authentication route
 router.post('/login', adminController.adminLogin);
 
-// POST endpoint for uploading or updating an image pair
 router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name: 'aiImage' }]), async (req, res) => {
   try {
     const { scheduledDate, pairIndex } = req.body;
     if (!scheduledDate) {
       return res.status(400).json({ error: 'Scheduled date must be provided.' });
     }
-    
+
     const date = new Date(scheduledDate);
-    // Set to 12:00 AM EST (or EDT depending on the season)
-    const isDaylightSaving = date.getMonth() >= 2 && date.getMonth() <= 10; // March to November
-    if (isDaylightSaving) {
-      date.setUTCHours(4, 0, 0, 0); // 4:00 AM UTC for EDT
-    } else {
-      date.setUTCHours(5, 0, 0, 0); // 5:00 AM UTC for EST
-    }
-    
-    // Upload images to Cloudinary
+    date.setUTCHours(5, 0, 0, 0); // Standardize to UTC+5 (EST)
+
+    // Ensure images exist
     const humanImage = req.files['humanImage']?.[0];
     const aiImage = req.files['aiImage']?.[0];
-    
     if (!humanImage || !aiImage) {
       return res.status(400).json({ error: 'Both images must be provided.' });
     }
-    
-    const humanUploadResult = await uploadToCloudinary(humanImage.buffer, 'artalyze/humanImages');
-    const aiUploadResult = await uploadToCloudinary(aiImage.buffer, 'artalyze/aiImages');
-    
-    // Check if an entry for the scheduled date already exists
-    let imagePairDocument = await ImagePair.findOne({ scheduledDate: date });
-    
-    if (imagePairDocument) {
-      // Use MongoDB `$set` to update specific pair index, avoiding VersionError
-      const updatedDocument = await ImagePair.findOneAndUpdate(
-        { scheduledDate: date },
-        {
-          $set: {
-            [`pairs.${pairIndex}.humanImageURL`]: humanUploadResult.secure_url,
-            [`pairs.${pairIndex}.aiImageURL`]: aiUploadResult.secure_url,
-          },
-        },
-        { new: true, upsert: true }
-      );
-    
-      res.json({ message: 'Image pair updated successfully', data: updatedDocument });
+
+    // Upload images to Cloudinary
+    let humanUploadResult, aiUploadResult;
+    try {
+      humanUploadResult = await uploadToCloudinary(humanImage.buffer, 'artalyze/humanImages');
+      aiUploadResult = await uploadToCloudinary(aiImage.buffer, 'artalyze/aiImages');
+    } catch (uploadError) {
+      console.error('Cloudinary Upload Error:', uploadError);
+      return res.status(500).json({ error: 'Image upload failed' });
     }
-    
+
+    // Ensure upload was successful
+    if (!humanUploadResult?.secure_url || !aiUploadResult?.secure_url) {
+      return res.status(500).json({ error: 'Failed to retrieve image URLs from Cloudinary' });
+    }
+
+    // Check if a document for the scheduled date exists
+    let imagePairDocument = await ImagePair.findOne({ scheduledDate: date });
+    if (imagePairDocument) {
+      // Update existing image pair
+      imagePairDocument.pairs[pairIndex] = {
+        humanImageURL: humanUploadResult.secure_url,
+        aiImageURL: aiUploadResult.secure_url,
+      };
+    } else {
+      // Create new document
+      imagePairDocument = new ImagePair({
+        scheduledDate: date,
+        pairs: [{
+          humanImageURL: humanUploadResult.secure_url,
+          aiImageURL: aiUploadResult.secure_url,
+        }],
+        status: 'pending'
+      });
+    }
+
+    await imagePairDocument.save();
+    res.json({ message: 'Image pair uploaded successfully', data: imagePairDocument });
+
   } catch (error) {
     console.error('Upload Error:', error);
     res.status(500).json({ error: 'Failed to upload image pair' });
   }
 });
 
+
 // Add this route to `adminRoutes.js`
-router.get('/get-image-pairs-by-date/:date', async (req, res) => {
+exports.getImagePairsByDate = async (req, res) => {
   try {
     const { date } = req.params;
     if (!date) {
       return res.status(400).json({ error: 'Date parameter is required' });
     }
 
-    // Parse the date and standardize it to match stored dates
+    // Convert the date to match MongoDB storage
     const queryDate = new Date(date);
-    queryDate.setUTCHours(5, 0, 0, 0); // Standardize to EST/EDT timezone
+    queryDate.setUTCHours(5, 0, 0, 0); // Ensure correct timezone
 
-    // Query MongoDB for the date
     const imagePairs = await ImagePair.findOne({ scheduledDate: queryDate });
-
     if (!imagePairs) {
       return res.status(404).json({ error: 'No image pairs found for this date' });
     }
 
-    res.json({ data: imagePairs });
+    res.status(200).json(imagePairs);
   } catch (error) {
     console.error('Error fetching image pairs:', error);
-    res.status(500).json({ error: 'Failed to retrieve image pairs' });
+    res.status(500).json({ message: 'Failed to fetch image pairs' });
   }
-});
+};
+
 
 
 module.exports = router;
