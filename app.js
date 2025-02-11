@@ -26,7 +26,7 @@ app.use((req, res, next) => {
 // CORS configuration
 app.use(cors({
     origin: process.env.NODE_ENV === 'production' ? 
-        ['https://artalyze.app', 'https://artalyze-admin.vercel.app'] 
+        ['https://artalyze.app', 'https://artalyze-admin.vercel.app', 'https://artalyze-user.vercel.app'] 
         : ['http://localhost:3000', 'http://localhost:3001'],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
