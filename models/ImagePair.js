@@ -29,4 +29,7 @@ ImagePairSchema.pre('save', function(next) {
   next();
 }); // Middleware to update 'updatedAt' before saving
 
-module.exports = mongoose.model('ImagePair', ImagePairSchema);
+const collectionName = process.env.NODE_ENV === "staging" ? "staging_imagePairs" : "imagePairs";
+
+module.exports = mongoose.model(collectionName, ImagePairSchema);
+
