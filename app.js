@@ -34,8 +34,9 @@ app.use(cors({
           ]
         : process.env.NODE_ENV === 'staging'
         ? [
-            'https://artalyze-backend-staging.up.railway.app',
-            'https://staging.artalyze-user.vercel.app'
+            'https://staging-admin.artalyze.app',  // ✅ Added Staging Admin Panel
+            'https://staging.artalyze.app',        // ✅ Added Staging User Panel
+            'https://artalyze-backend-staging.up.railway.app'
           ]
         : [
             'http://localhost:3000',
@@ -45,8 +46,6 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
 }));
-
-
 
 // Middleware to parse JSON and URL-encoded data
 app.use(express.json());
