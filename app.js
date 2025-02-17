@@ -34,8 +34,8 @@ app.use(cors({
           ]
         : process.env.NODE_ENV === 'staging'
         ? [
-            'https://staging-admin.artalyze.app',  // ✅ Added Staging Admin Panel
-            'https://staging.artalyze.app',        // ✅ Added Staging User Panel
+            'https://staging-admin.artalyze.app', // ✅ Added Staging Admin Panel
+            'https://staging.artalyze.app',       // ✅ Staging User Panel
             'https://artalyze-backend-staging.up.railway.app'
           ]
         : [
