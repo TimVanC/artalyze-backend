@@ -2,6 +2,7 @@
 const express = require('express');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
+const mongoose = require('mongoose'); // ✅ Fix: Import mongoose
 const ImagePair = require('../models/ImagePair');
 const { authenticateToken, authorizeAdmin } = require('../middleware/authMiddleware');
 const router = express.Router();
@@ -12,8 +13,15 @@ const adminController = require('../controllers/adminController');
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
+// Dynamically select collection name based on environment
 const collectionName = process.env.NODE_ENV === "staging" ? "staging_imagePairs" : "imagePairs";
 const ImagePairCollection = mongoose.model(collectionName, ImagePair.schema);
+
+// ✅ Ensure `ImagePairCollection` is available to all routes if needed
+router.use((req, res, next) => {
+  req.ImagePairCollection = ImagePairCollection;
+  next();
+});
 
 // Cloudinary setup (ensure environment variables are configured)
 cloudinary.config({
@@ -111,7 +119,7 @@ router.get('/get-image-pairs-by-date/:date', async (req, res) => {
     queryEnd.setUTCHours(23, 59, 59, 999); // End of day UTC
 
     // Find the image pair within this date range
-    const imagePairs = await ImagePair.findOne({
+    const imagePairs = await ImagePairCollection.findOne({
       scheduledDate: { $gte: queryStart, $lte: queryEnd }
     });
 
