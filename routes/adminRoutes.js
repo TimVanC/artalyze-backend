@@ -12,6 +12,9 @@ const adminController = require('../controllers/adminController');
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
+const collectionName = process.env.NODE_ENV === "staging" ? "staging_imagePairs" : "imagePairs";
+const ImagePairCollection = mongoose.model(collectionName, ImagePair.schema);
+
 // Cloudinary setup (ensure environment variables are configured)
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -72,7 +75,7 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
     }
 
     // Update the database: Use `findOneAndUpdate()` with `$push`
-    const updateResult = await ImagePair.findOneAndUpdate(
+    const updateResult = await ImagePairCollection.findOneAndUpdate(
       { scheduledDate: date }, // Find the document by date
       {
         $push: { 
