@@ -25,27 +25,18 @@ app.use((req, res, next) => {
 
 // CORS configuration
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production'
-        ? [
-            'https://artalyze.app',
-            'https://www.artalyze.app',
-            'https://artalyze-admin.vercel.app',
-            'https://artalyze-user.vercel.app'
-          ]
-        : process.env.NODE_ENV === 'staging'
+    origin: process.env.NODE_ENV === 'staging'
         ? [
             'https://staging-admin.artalyze.app', // ✅ Added Staging Admin Panel
-            'https://staging.artalyze.app',       // ✅ Staging User Panel
+            'https://staging.artalyze.app',
             'https://artalyze-backend-staging.up.railway.app'
           ]
-        : [
-            'http://localhost:3000',
-            'http://localhost:3001'
-          ],
+        : [...otherOrigins],
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 
 // Middleware to parse JSON and URL-encoded data
 app.use(express.json());
