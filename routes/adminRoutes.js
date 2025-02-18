@@ -34,7 +34,11 @@ cloudinary.config({
 const uploadToCloudinary = (fileBuffer, folderName) => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
-      { folder: folderName },
+      {
+        folder: folderName,
+        format: "webp", // ✅ Force WebP conversion
+        transformation: [{ width: 500, crop: "limit" }], // ✅ Limit max width to 500px
+      },
       (error, result) => {
         if (error) {
           reject(error);
