@@ -310,6 +310,63 @@ exports.saveAlreadyGuessed = async (req, res) => {
   }
 };
 
+exports.saveAttempts = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { attempts } = req.body;
+
+    if (!Array.isArray(attempts)) {
+      return res.status(400).json({ message: "Invalid attempts data." });
+    }
+
+    let stats = await Stats.findOne({ userId });
+
+    if (!stats) {
+      stats = new Stats({ userId, attempts: [] });
+    }
+
+    // Prevent duplicate attempts
+    const uniqueAttempts = [...new Set([...stats.attempts.map(JSON.stringify), ...attempts.map(JSON.stringify)])].map(JSON.parse);
+
+    stats.attempts = uniqueAttempts;
+    await stats.save();
+
+    res.status(200).json({ attempts: stats.attempts });
+  } catch (error) {
+    console.error("Error updating attempts:", error);
+    res.status(500).json({ message: "Failed to update attempts." });
+  }
+};
+
+exports.saveCompletedAttempts = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { completedAttempts } = req.body;
+
+    if (!Array.isArray(completedAttempts)) {
+      return res.status(400).json({ message: "Invalid completedAttempts data." });
+    }
+
+    let stats = await Stats.findOne({ userId });
+
+    if (!stats) {
+      stats = new Stats({ userId, completedAttempts: [] });
+    }
+
+    // Ensure unique completed attempts
+    const uniqueCompletedAttempts = [...new Set([...stats.completedAttempts.map(JSON.stringify), ...completedAttempts.map(JSON.stringify)])].map(JSON.parse);
+
+    stats.completedAttempts = uniqueCompletedAttempts;
+    stats.attempts = []; // Clear attempts after completion
+    await stats.save();
+
+    res.status(200).json({ completedAttempts: stats.completedAttempts });
+  } catch (error) {
+    console.error("Error updating completedAttempts:", error);
+    res.status(500).json({ message: "Failed to update completedAttempts." });
+  }
+};
+
 // Fetch triesRemaining
 exports.getTriesRemaining = async (req, res) => {
   try {

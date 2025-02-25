@@ -38,6 +38,10 @@ router.get('/completed-selections', getCompletedSelections);
 // Route to save completedSelections
 router.put('/completed-selections/:userId', saveCompletedSelections);
 
+router.put("/attempts", saveAttempts);
+
+router.put("/completed-attempts", saveCompletedAttempts);
+
 // ✅ Route to save alreadyGuessed
 router.put("/already-guessed", saveAlreadyGuessed);
 
