@@ -10,8 +10,11 @@ const {
   getCompletedSelections, 
   saveCompletedSelections, 
   resetTries,
-  saveAlreadyGuessed
+  saveAlreadyGuessed,
+  saveAttempts, 
+  saveCompletedAttempts 
 } = require('../controllers/statsController');
+
 const { authenticateToken } = require('../middleware/authMiddleware');
 
 // Apply authentication middleware
