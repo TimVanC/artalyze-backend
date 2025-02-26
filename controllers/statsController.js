@@ -341,25 +341,24 @@ exports.saveCompletedAttempts = async (req, res) => {
       return res.status(400).json({ message: "Invalid completedAttempts data." });
     }
 
+    // ✅ Ensure the user document exists before updating
     let stats = await Stats.findOne({ userId });
 
     if (!stats) {
+      console.log(`⚠️ No stats found for user ${userId}, creating new document.`);
       stats = new Stats({ userId, completedAttempts: [] });
     }
 
-    // Ensure unique completed attempts
-    const uniqueCompletedAttempts = [...new Set([...stats.completedAttempts.map(JSON.stringify), ...completedAttempts.map(JSON.stringify)])].map(JSON.parse);
-
-    stats.completedAttempts = uniqueCompletedAttempts;
-    stats.attempts = []; // Clear attempts after completion
+    stats.completedAttempts = completedAttempts;
     await stats.save();
 
     res.status(200).json({ completedAttempts: stats.completedAttempts });
   } catch (error) {
-    console.error("Error updating completedAttempts:", error);
-    res.status(500).json({ message: "Failed to update completedAttempts." });
+    console.error("❌ Error updating completedAttempts:", error);
+    res.status(500).json({ message: "Failed to update completedAttempts.", error });
   }
 };
+
 
 // Fetch triesRemaining
 exports.getTriesRemaining = async (req, res) => {
