@@ -35,6 +35,7 @@ exports.getDailyPuzzle = async (req, res) => {
   }
 };
 
+
 // Check if the user has played today
 exports.checkIfPlayedToday = async (req, res) => {
   try {
