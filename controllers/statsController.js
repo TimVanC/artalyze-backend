@@ -311,31 +311,25 @@ exports.saveAlreadyGuessed = async (req, res) => {
 };
 
 exports.saveAttempts = async (req, res) => {
-  try {
-    const { userId } = req.user;
-    const { attempts } = req.body;
+  const { userId } = req.user;
+  const { attempts } = req.body;
 
-    if (!Array.isArray(attempts)) {
+  if (!Array.isArray(attempts)) {
       return res.status(400).json({ message: "Invalid attempts data." });
-    }
-
-    let stats = await Stats.findOne({ userId });
-
-    if (!stats) {
-      stats = new Stats({ userId, attempts: [] });
-    }
-
-    // Prevent duplicate attempts
-    const uniqueAttempts = [...new Set([...stats.attempts.map(JSON.stringify), ...attempts.map(JSON.stringify)])].map(JSON.parse);
-
-    stats.attempts = uniqueAttempts;
-    await stats.save();
-
-    res.status(200).json({ attempts: stats.attempts });
-  } catch (error) {
-    console.error("Error updating attempts:", error);
-    res.status(500).json({ message: "Failed to update attempts." });
   }
+
+  // Ensure boolean values are stored
+  const formattedAttempts = attempts.map(attempt =>
+      attempt.map(selected => !!selected) // Convert values to true/false
+  );
+
+  const stats = await Stats.findOneAndUpdate(
+      { userId },
+      { $set: { attempts: formattedAttempts } },
+      { new: true, upsert: true }
+  );
+
+  res.status(200).json({ attempts: stats.attempts });
 };
 
 exports.saveCompletedAttempts = async (req, res) => {
