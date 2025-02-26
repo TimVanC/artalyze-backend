@@ -400,12 +400,13 @@ exports.decrementTries = async (req, res) => {
   }
 };
 
+// Reset triesRemaining at midnight
 exports.resetTries = async (req, res) => {
   try {
     const { userId } = req.user;
     const todayInEST = getTodayInEST();
 
-    console.log(`Checking if tries and attempts should be reset for user ${userId}...`);
+    console.log(`Checking if tries should be reset for user ${userId}...`);
 
     const stats = await Stats.findOne({ userId });
 
@@ -414,23 +415,19 @@ exports.resetTries = async (req, res) => {
       return res.status(404).json({ message: 'Stats not found for user.' });
     }
 
-    // ✅ Reset tries and attempts if lastSelectionMadeDate is outdated
-    if (!stats.lastSelectionMadeDate || stats.lastSelectionMadeDate !== todayInEST) {
-      console.log(`Resetting triesRemaining and attempts for user ${userId}`);
-
+    // Reset tries if the game was completed today or if the user last attempted yesterday
+    if (stats.lastPlayedDate === todayInEST || stats.lastTriesMadeDate !== todayInEST) {
+      console.log(`Resetting triesRemaining to 3 for user ${userId}`);
       stats.triesRemaining = 3;
-      stats.attempts = []; // ✅ Ensure attempts[] resets when LSMD is outdated
-      stats.completedAttempts = [];
-      stats.lastSelectionMadeDate = todayInEST; // ✅ Update LSMD
-
+      stats.lastTriesMadeDate = todayInEST;
       await stats.save();
     } else {
       console.log(`Tries remain unchanged for user ${userId}, current tries: ${stats.triesRemaining}`);
     }
 
-    res.status(200).json({ triesRemaining: stats.triesRemaining, attempts: stats.attempts });
+    res.status(200).json({ triesRemaining: stats.triesRemaining });
   } catch (error) {
-    console.error('❌ Error resetting triesRemaining and attempts:', error);
-    res.status(500).json({ message: 'Failed to reset triesRemaining and attempts.' });
+    console.error('Error resetting triesRemaining:', error);
+    res.status(500).json({ message: 'Failed to reset triesRemaining.' });
   }
 };
