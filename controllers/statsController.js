@@ -185,20 +185,22 @@ exports.getSelections = async (req, res) => {
       return res.status(404).json({ message: "Stats not found for this user." });
     }
 
-    // ✅ **Reset selections, attempts, and completedAttempts if LSMD is outdated**
+    // ✅ **Reset selections, attempts, completedSelections, and completedAttempts if LSMD is outdated**
     if (stats.lastSelectionMadeDate !== todayInEST) {
-      console.log("LSMD is outdated. Resetting selections, attempts, and completedAttempts.");
+      console.log("LSMD is outdated. Resetting selections, attempts, completedSelections, and completedAttempts.");
       stats.selections = [];
       stats.attempts = [];
+      stats.completedSelections = []; // ✅ Ensures completedSelections reset on a new day
       stats.completedAttempts = []; // ✅ Ensures completedAttempts reset on a new day
       stats.lastSelectionMadeDate = todayInEST;
       await stats.save();
     }
 
-    console.log("✅ Returning selections, attempts, completedAttempts, and alreadyGuessed.");
+    console.log("✅ Returning selections, attempts, completedSelections, completedAttempts, and alreadyGuessed.");
     res.status(200).json({
       selections: stats.selections || [],
       attempts: stats.attempts || [],
+      completedSelections: stats.completedSelections || [], // ✅ Now included
       completedAttempts: stats.completedAttempts || [],
       alreadyGuessed: stats.alreadyGuessed || [],
     });
