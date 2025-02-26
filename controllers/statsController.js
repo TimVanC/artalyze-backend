@@ -400,7 +400,6 @@ exports.decrementTries = async (req, res) => {
   }
 };
 
-
 exports.resetTries = async (req, res) => {
   try {
     const { userId } = req.user;
@@ -415,31 +414,23 @@ exports.resetTries = async (req, res) => {
       return res.status(404).json({ message: 'Stats not found for user.' });
     }
 
-    // Reset tries, attempts, and completedAttempts if the game was completed today or if the user last attempted yesterday
-    if (stats.lastPlayedDate === todayInEST || stats.lastTriesMadeDate !== todayInEST) {
-      console.log(`Resetting triesRemaining, attempts, and completedAttempts for user ${userId}`);
+    // ✅ Reset tries and attempts if lastSelectionMadeDate is outdated
+    if (!stats.lastSelectionMadeDate || stats.lastSelectionMadeDate !== todayInEST) {
+      console.log(`Resetting triesRemaining and attempts for user ${userId}`);
 
       stats.triesRemaining = 3;
-      stats.attempts = [];
+      stats.attempts = []; // ✅ Ensure attempts[] resets when LSMD is outdated
       stats.completedAttempts = [];
-      stats.lastTriesMadeDate = todayInEST;
+      stats.lastSelectionMadeDate = todayInEST; // ✅ Update LSMD
 
       await stats.save();
     } else {
       console.log(`Tries remain unchanged for user ${userId}, current tries: ${stats.triesRemaining}`);
     }
 
-    // ✅ NEW: Reset `attempts[]` if `lastTriesMadeDate` does not match today
-    if (stats.lastTriesMadeDate !== todayInEST) {
-      console.log(`Resetting attempts for user ${userId} due to new day.`);
-      stats.attempts = [];
-      await stats.save();
-    }
-
     res.status(200).json({ triesRemaining: stats.triesRemaining, attempts: stats.attempts });
   } catch (error) {
-    console.error('❌ Error resetting triesRemaining, attempts, and completedAttempts:', error);
-    res.status(500).json({ message: 'Failed to reset triesRemaining, attempts, and completedAttempts.' });
+    console.error('❌ Error resetting triesRemaining and attempts:', error);
+    res.status(500).json({ message: 'Failed to reset triesRemaining and attempts.' });
   }
 };
-
