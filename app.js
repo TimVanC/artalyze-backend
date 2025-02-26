@@ -24,18 +24,22 @@ app.use((req, res, next) => {
 });
 
 // CORS configuration
+// Define otherOrigins before using it
+const otherOrigins = process.env.OTHER_ORIGINS ? process.env.OTHER_ORIGINS.split(",") : [];
+
 app.use(cors({
     origin: process.env.NODE_ENV === 'staging'
         ? [
-            'https://staging-admin.artalyze.app', // ✅ Added Staging Admin Panel
+            'https://staging-admin.artalyze.app',
             'https://staging.artalyze.app',
             'https://artalyze-backend-staging.up.railway.app'
           ]
-        : [...otherOrigins],
+        : [...otherOrigins], // ✅ Now `otherOrigins` is properly defined
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 
 
 // Middleware to parse JSON and URL-encoded data
