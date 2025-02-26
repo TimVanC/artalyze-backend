@@ -407,7 +407,7 @@ exports.resetTries = async (req, res) => {
     const { userId } = req.user;
     const todayInEST = getTodayInEST();
 
-    console.log(`Checking if tries, attempts, and completedAttempts should be reset for user ${userId}...`);
+    console.log(`Checking if tries and attempts should be reset for user ${userId}...`);
 
     const stats = await Stats.findOne({ userId });
 
@@ -436,4 +436,3 @@ exports.resetTries = async (req, res) => {
     res.status(500).json({ message: 'Failed to reset triesRemaining, attempts, and completedAttempts.' });
   }
 };
-
