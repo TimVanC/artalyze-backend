@@ -177,27 +177,30 @@ exports.deleteUserStats = async (req, res) => {
 // Fetch selections
 exports.getSelections = async (req, res) => {
   try {
-      const { userId } = req.user;
-      const todayInEST = getTodayInEST();
-      const stats = await Stats.findOne({ userId });
+    const { userId } = req.user;
+    const todayInEST = getTodayInEST();
+    const stats = await Stats.findOne({ userId });
 
-      if (!stats) {
-          return res.status(404).json({ message: "Stats not found for this user." });
-      }
+    if (!stats) {
+      return res.status(404).json({ message: "Stats not found for this user." });
+    }
 
-      // ✅ **Reset selections and attempts if LSMD is outdated**
-      if (stats.lastSelectionMadeDate !== todayInEST) {
-          console.log("LSMD is outdated. Resetting selections and attempts.");
-          stats.selections = [];
-          stats.attempts = []; // Reset attempts
-          stats.lastSelectionMadeDate = todayInEST;
-          await stats.save();
-      }
+    // ✅ **Reset selections and attempts if LSMD is outdated**
+    if (stats.lastSelectionMadeDate !== todayInEST) {
+      console.log("LSMD is outdated. Resetting selections and attempts.");
+      stats.selections = [];
+      stats.attempts = []; // Reset attempts only if they exist
+      stats.alreadyGuessed = []; // Also reset alreadyGuessed to prevent resubmissions
+      stats.lastSelectionMadeDate = todayInEST;
+      await stats.save();
+    } else {
+      console.log("✅ LSMD is up-to-date. Restoring selections and attempts.");
+    }
 
-      res.status(200).json({ selections: stats.selections });
+    res.status(200).json({ selections: stats.selections });
   } catch (error) {
-      console.error("Error fetching selections:", error);
-      res.status(500).json({ message: "Failed to fetch selections." });
+    console.error("Error fetching selections:", error);
+    res.status(500).json({ message: "Failed to fetch selections." });
   }
 };
 
@@ -214,8 +217,8 @@ exports.saveSelections = async (req, res) => {
 
     const stats = await Stats.findOneAndUpdate(
       { userId },
-      { 
-        $set: { 
+      {
+        $set: {
           selections,
           lastSelectionMadeDate: todayInEST, // Update LSMD
         }
@@ -316,18 +319,18 @@ exports.saveAttempts = async (req, res) => {
   const { attempts } = req.body;
 
   if (!Array.isArray(attempts)) {
-      return res.status(400).json({ message: "Invalid attempts data." });
+    return res.status(400).json({ message: "Invalid attempts data." });
   }
 
   // Ensure boolean values are stored
   const formattedAttempts = attempts.map(attempt =>
-      attempt.map(selected => !!selected) // Convert values to true/false
+    attempt.map(selected => !!selected) // Convert values to true/false
   );
 
   const stats = await Stats.findOneAndUpdate(
-      { userId },
-      { $set: { attempts: formattedAttempts } },
-      { new: true, upsert: true }
+    { userId },
+    { $set: { attempts: formattedAttempts } },
+    { new: true, upsert: true }
   );
 
   res.status(200).json({ attempts: stats.attempts });
