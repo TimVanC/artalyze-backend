@@ -401,7 +401,6 @@ exports.decrementTries = async (req, res) => {
 };
 
 
-// Reset triesRemaining, attempts, and completedAttempts at midnight
 exports.resetTries = async (req, res) => {
   try {
     const { userId } = req.user;
@@ -430,9 +429,17 @@ exports.resetTries = async (req, res) => {
       console.log(`Tries remain unchanged for user ${userId}, current tries: ${stats.triesRemaining}`);
     }
 
-    res.status(200).json({ triesRemaining: stats.triesRemaining });
+    // ✅ NEW: Reset `attempts[]` if `lastTriesMadeDate` does not match today
+    if (stats.lastTriesMadeDate !== todayInEST) {
+      console.log(`Resetting attempts for user ${userId} due to new day.`);
+      stats.attempts = [];
+      await stats.save();
+    }
+
+    res.status(200).json({ triesRemaining: stats.triesRemaining, attempts: stats.attempts });
   } catch (error) {
     console.error('❌ Error resetting triesRemaining, attempts, and completedAttempts:', error);
     res.status(500).json({ message: 'Failed to reset triesRemaining, attempts, and completedAttempts.' });
   }
 };
+
