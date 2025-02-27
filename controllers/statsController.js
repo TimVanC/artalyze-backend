@@ -273,29 +273,28 @@ exports.saveCompletedSelections = async (req, res) => {
     const { completedSelections } = req.body;
 
     if (!userId) {
-      console.error("❌ Error: userId is missing in request.");
+      console.error("❌ Missing userId in request.");
       return res.status(400).json({ message: "User ID is required." });
     }
 
     let stats = await Stats.findOne({ userId });
 
     if (!stats) {
-      console.log(`📌 No existing stats for userId: ${userId}, creating new entry.`);
+      console.log(`📌 No stats found for userId: ${userId}. Creating new entry.`);
       stats = new Stats({ userId, completedSelections: [] });
     }
 
-    // ✅ Always update completedSelections even if empty
+    // Always save, even if `completedSelections` is empty
     stats.completedSelections = completedSelections || [];
     await stats.save();
 
     console.log("✅ CompletedSelections successfully saved:", stats.completedSelections);
-    res.status(200).json(stats);
+    res.status(200).json({ completedSelections: stats.completedSelections });
   } catch (error) {
     console.error("❌ Error saving completedSelections:", error);
     res.status(500).json({ message: "Failed to save completedSelections." });
   }
 };
-
 
 exports.saveAlreadyGuessed = async (req, res) => {
   try {
