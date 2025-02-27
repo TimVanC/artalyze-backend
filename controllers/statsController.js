@@ -272,31 +272,30 @@ exports.saveCompletedSelections = async (req, res) => {
     const { userId } = req.params;
     const { completedSelections } = req.body;
 
-    // Validate userId and completedSelections
-    if (!userId || !Array.isArray(completedSelections)) {
-      console.error("Invalid parameters for saving completedSelections:", { userId, completedSelections });
-      return res.status(400).json({ message: "Invalid parameters. Cannot save completedSelections." });
+    if (!userId) {
+      console.error("❌ Error: userId is missing in request.");
+      return res.status(400).json({ message: "User ID is required." });
     }
 
-    const stats = await Stats.findOne({ userId });
+    let stats = await Stats.findOne({ userId });
 
     if (!stats) {
-      console.error(`Stats not found for userId: ${userId}`);
-      return res.status(404).json({ message: "Stats not found for this user." });
+      console.log(`📌 No existing stats for userId: ${userId}, creating new entry.`);
+      stats = new Stats({ userId, completedSelections: [] });
     }
 
-    // Update and save completedSelections
-    stats.completedSelections = completedSelections;
-    const updatedStats = await stats.save();
+    // ✅ Always update completedSelections even if empty
+    stats.completedSelections = completedSelections || [];
+    await stats.save();
 
-    console.log("CompletedSelections saved successfully in backend:", updatedStats.completedSelections);
-
-    res.status(200).json(updatedStats);
+    console.log("✅ CompletedSelections successfully saved:", stats.completedSelections);
+    res.status(200).json(stats);
   } catch (error) {
-    console.error("Error saving completedSelections:", error);
+    console.error("❌ Error saving completedSelections:", error);
     res.status(500).json({ message: "Failed to save completedSelections." });
   }
 };
+
 
 exports.saveAlreadyGuessed = async (req, res) => {
   try {
