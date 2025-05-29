@@ -8,6 +8,7 @@ const { authenticateToken, authorizeAdmin } = require('../middleware/authMiddlew
 const router = express.Router();
 const streamifier = require('streamifier');
 const adminController = require('../controllers/adminController');
+const sharp = require('sharp');
 
 // Configure file upload storage
 const storage = multer.memoryStorage();
@@ -30,14 +31,32 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Resize image while preserving aspect ratio
+const resizeImage = async (buffer) => {
+  const image = sharp(buffer);
+  const metadata = await image.metadata();
+  
+  // Only resize if width is greater than 600px
+  if (metadata.width > 600) {
+    return await image
+      .resize(600, null, { 
+        fit: 'inside',
+        withoutEnlargement: true 
+      })
+      .toBuffer();
+  }
+  
+  return buffer;
+};
+
 // Upload file to Cloudinary
 const uploadToCloudinary = (fileBuffer, folderName) => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: folderName,
-        format: "webp", // ✅ Force WebP conversion
-        transformation: [{ width: 500, crop: "limit" }], // ✅ Limit max width to 500px
+        format: "webp",
+        quality: "auto:best",
       },
       (error, result) => {
         if (error) {
@@ -103,6 +122,40 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
   } catch (error) {
     console.error('Upload Error:', error);
     res.status(500).json({ error: 'Failed to upload image pair' });
+  }
+});
+
+// Upload human image for automated pairing
+router.post('/upload-human-image', upload.single('humanImage'), async (req, res) => {
+  try {
+    const { scheduledDate } = req.body;
+    if (!scheduledDate) {
+      return res.status(400).json({ error: 'Scheduled date must be provided.' });
+    }
+
+    const humanImage = req.file;
+    if (!humanImage) {
+      return res.status(400).json({ error: 'Human image must be provided.' });
+    }
+
+    // Resize image before uploading
+    const resizedBuffer = await resizeImage(humanImage.buffer);
+
+    // Upload to Cloudinary's humanImages folder
+    const humanUploadResult = await uploadToCloudinary(resizedBuffer, 'artalyze/humanImages');
+
+    if (!humanUploadResult?.secure_url) {
+      return res.status(500).json({ error: 'Failed to upload image to Cloudinary' });
+    }
+
+    res.json({ 
+      message: 'Human image uploaded successfully',
+      imageUrl: humanUploadResult.secure_url 
+    });
+
+  } catch (error) {
+    console.error('Upload Error:', error);
+    res.status(500).json({ error: 'Failed to upload human image' });
   }
 });
 
