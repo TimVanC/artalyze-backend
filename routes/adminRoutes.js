@@ -9,7 +9,7 @@ const router = express.Router();
 const streamifier = require('streamifier');
 const adminController = require('../controllers/adminController');
 
-// Multer setup for file handling (store in memory)
+// Configure file upload storage
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
@@ -30,7 +30,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Helper function to upload to Cloudinary using a buffer stream
+// Upload file to Cloudinary
 const uploadToCloudinary = (fileBuffer, folderName) => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
@@ -51,9 +51,10 @@ const uploadToCloudinary = (fileBuffer, folderName) => {
   });
 };
 
-// Admin authentication route
+// Admin authentication
 router.post('/login', adminController.adminLogin);
 
+// Upload image pair for a date
 router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name: 'aiImage' }]), async (req, res) => {
   try {
     const { scheduledDate, pairIndex } = req.body;
@@ -62,16 +63,14 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
     }
 
     const date = new Date(scheduledDate);
-    date.setUTCHours(5, 0, 0, 0); // Standardize to UTC+5 (EST)
+    date.setUTCHours(5, 0, 0, 0);
 
-    // Ensure images exist
     const humanImage = req.files['humanImage']?.[0];
     const aiImage = req.files['aiImage']?.[0];
     if (!humanImage || !aiImage) {
       return res.status(400).json({ error: 'Both images must be provided.' });
     }
 
-    // Upload images to Cloudinary
     let humanUploadResult, aiUploadResult;
     try {
       humanUploadResult = await uploadToCloudinary(humanImage.buffer, 'artalyze/humanImages');
@@ -81,7 +80,6 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
       return res.status(500).json({ error: 'Image upload failed' });
     }
 
-    // Ensure upload was successful
     if (!humanUploadResult?.secure_url || !aiUploadResult?.secure_url) {
       return res.status(500).json({ error: 'Failed to retrieve image URLs from Cloudinary' });
     }
@@ -108,6 +106,7 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
   }
 });
 
+// Get image pairs for a date
 router.get('/get-image-pairs-by-date/:date', async (req, res) => {
   try {
     const { date } = req.params;
@@ -115,12 +114,11 @@ router.get('/get-image-pairs-by-date/:date', async (req, res) => {
       return res.status(400).json({ error: 'Date parameter is required' });
     }
 
-    // Convert date string to UTC range for the full day
     const queryStart = new Date(date);
-    queryStart.setUTCHours(0, 0, 0, 0); // Start of day UTC
+    queryStart.setUTCHours(0, 0, 0, 0);
 
     const queryEnd = new Date(queryStart);
-    queryEnd.setUTCHours(23, 59, 59, 999); // End of day UTC
+    queryEnd.setUTCHours(23, 59, 59, 999);
 
     // Find the image pair within this date range
     const imagePairs = await ImagePairCollection.findOne({
