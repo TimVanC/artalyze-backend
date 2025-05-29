@@ -160,9 +160,25 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
       imagePairDoc = await ImagePairCollection.create({
         scheduledDate: date,
         pairs: [], // Start with empty pairs array
+        pendingHumanImages: [], // Array to track uploaded human images
         status: 'pending'
       });
     }
+
+    // Add the human image URL to pendingHumanImages array
+    imagePairDoc = await ImagePairCollection.findOneAndUpdate(
+      { scheduledDate: date },
+      { 
+        $push: { 
+          pendingHumanImages: {
+            url: humanUploadResult.secure_url,
+            publicId: humanUploadResult.public_id,
+            uploadedAt: new Date()
+          }
+        }
+      },
+      { new: true }
+    );
 
     res.json({ 
       message: 'Human image uploaded successfully',

@@ -15,6 +15,13 @@ const ImagePairSchema = new mongoose.Schema({
       metadata: { type: Object, default: {} } // Added for future extensibility
     }
   ],
+  pendingHumanImages: [
+    {
+      url: { type: String, required: true },
+      publicId: { type: String, required: true },
+      uploadedAt: { type: Date, default: Date.now }
+    }
+  ],
   status: { 
     type: String, 
     enum: ['pending', 'approved', 'live'], 
