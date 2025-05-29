@@ -148,9 +148,26 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
       return res.status(500).json({ error: 'Failed to upload image to Cloudinary' });
     }
 
+    // Create or update MongoDB document for this date
+    const date = new Date(scheduledDate);
+    date.setUTCHours(5, 0, 0, 0);
+
+    // Check if document exists for this date
+    let imagePairDoc = await ImagePairCollection.findOne({ scheduledDate: date });
+    
+    if (!imagePairDoc) {
+      // Create new document if it doesn't exist
+      imagePairDoc = await ImagePairCollection.create({
+        scheduledDate: date,
+        pairs: [], // Start with empty pairs array
+        status: 'pending'
+      });
+    }
+
     res.json({ 
       message: 'Human image uploaded successfully',
-      imageUrl: humanUploadResult.secure_url 
+      imageUrl: humanUploadResult.secure_url,
+      imagePairDoc
     });
 
   } catch (error) {
