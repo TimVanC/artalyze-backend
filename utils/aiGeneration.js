@@ -1,6 +1,11 @@
-const axios = require('axios');
+const OpenAI = require('openai');
 const cloudinary = require('cloudinary').v2;
 const sharp = require('sharp');
+
+// Initialize OpenAI with API key
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 // Maximum retries for AI generation
 const MAX_RETRIES = 3;
@@ -53,96 +58,61 @@ const generateAIImage = async (description, progressCallback = null) => {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       if (progressCallback) {
-        progressCallback(`Attempt ${attempt}: Generating AI image...`);
+        progressCallback(`Attempt ${attempt}: Generating AI image with DALL-E 3...`);
       }
 
-      // Call Replicate API to generate image with SDXL
-      const response = await axios.post(
-        'https://api.replicate.com/v1/predictions',
-        {
-          version: process.env.SDXL_VERSION,
-          input: {
-            prompt: description,
-            negative_prompt: "low quality, blurry, distorted, watermark, signature, text",
-            num_inference_steps: 50,
-            guidance_scale: 7.5,
-            width: 1024,
-            height: 1024,
-          },
-        },
-        {
-          headers: {
-            'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      // Generate image with DALL-E 3
+      const response = await openai.images.generate({
+        model: "dall-e-3",
+        prompt: description,
+        n: 1,
+        response_format: "url",
+        quality: "hd",
+        style: "vivid"
+      });
+
+      const imageUrl = response.data[0].url;
 
       if (progressCallback) {
-        progressCallback('Image generation started, waiting for completion...');
+        progressCallback('AI image generated, validating...');
       }
 
-      // Poll for completion
-      let imageUrl;
-      const predictionId = response.data.id;
-      const startTime = Date.now();
-      const TIMEOUT = 5 * 60 * 1000; // 5 minutes timeout
-
-      while (!imageUrl && (Date.now() - startTime) < TIMEOUT) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const status = await axios.get(
-          `https://api.replicate.com/v1/predictions/${predictionId}`,
-          {
-            headers: {
-              'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
-            },
-          }
-        );
-
-        if (status.data.status === 'succeeded') {
-          imageUrl = status.data.output[0];
-          if (progressCallback) {
-            progressCallback('AI image generated, validating...');
-          }
-
-          // Validate the generated image
-          const validation = await validateImage(imageUrl);
-          if (!validation.isValid) {
-            throw new Error(`Image validation failed: ${JSON.stringify(validation.issues)}`);
-          }
-
-          if (progressCallback) {
-            progressCallback('Image validated, uploading to Cloudinary...');
-          }
-
-          // Upload validated image to Cloudinary
-          const uploadResponse = await cloudinary.uploader.upload(imageUrl, {
-            folder: 'artalyze/aiImages',
-            format: 'webp',
-            quality: 'auto:best',
-          });
-
-          if (progressCallback) {
-            progressCallback('Process completed successfully');
-          }
-
-          return uploadResponse.secure_url;
-        } else if (status.data.status === 'failed') {
-          throw new Error('Image generation failed');
-        }
-
-        if (progressCallback) {
-          progressCallback(`Still processing... (${Math.round((Date.now() - startTime) / 1000)}s elapsed)`);
-        }
+      // Validate the generated image
+      const validation = await validateImage(imageUrl);
+      if (!validation.isValid) {
+        throw new Error(`Image validation failed: ${JSON.stringify(validation.issues)}`);
       }
 
-      if (!imageUrl) {
-        throw new Error('Generation timed out');
+      if (progressCallback) {
+        progressCallback('Image validated, uploading to Cloudinary...');
       }
+
+      // Upload validated image to Cloudinary
+      const uploadResponse = await cloudinary.uploader.upload(imageUrl, {
+        folder: 'artalyze/aiImages',
+        format: 'webp',
+        quality: 'auto:best',
+      });
+
+      if (progressCallback) {
+        progressCallback('Process completed successfully');
+      }
+
+      return uploadResponse.secure_url;
 
     } catch (error) {
       lastError = error;
       console.error(`Attempt ${attempt} failed:`, error);
+
+      // Handle rate limiting and quota errors
+      if (error.status === 429 || (error.error?.type === 'quota_exceeded')) {
+        console.error('Rate limit or quota exceeded:', error);
+        if (progressCallback) {
+          progressCallback('API quota exceeded. Skipping generation.');
+        }
+        // Return null to indicate generation was skipped
+        return null;
+      }
 
       if (progressCallback) {
         progressCallback(`Attempt ${attempt} failed, ${attempt < MAX_RETRIES ? 'retrying...' : 'giving up.'}`);
@@ -155,7 +125,9 @@ const generateAIImage = async (description, progressCallback = null) => {
     }
   }
 
-  throw new Error(`Failed to generate AI image after ${MAX_RETRIES} attempts. Last error: ${lastError.message}`);
+  // If we reach here, all attempts failed
+  console.error(`Failed to generate AI image after ${MAX_RETRIES} attempts:`, lastError);
+  return null;
 };
 
 module.exports = {

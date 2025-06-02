@@ -12,6 +12,7 @@ const sharp = require('sharp');
 const OpenAI = require('openai');
 const { generateAIImage } = require('../utils/aiGeneration');
 const jwt = require('jsonwebtoken');
+const { generateImageDescription, remixCaption } = require('../utils/textProcessing');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -256,23 +257,46 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
           throw new Error('Failed to get secure URL from Cloudinary');
         }
 
-        sendProgress(sessionId, 'Generating image description with GPT-4 Vision...');
+        sendProgress(sessionId, 'Generating image description with GPT-4o...');
         
+        let description = null;
         try {
-          // Generate image description using GPT-4 Vision
-          console.log('Starting GPT-4 Vision description generation...');
-          const description = await generateImageDescription(humanUploadResult.secure_url);
+          // Generate image description using GPT-4o
+          console.log('Starting GPT-4o description generation...');
+          description = await generateImageDescription(humanUploadResult.secure_url);
           console.log('Generated description:', description);
           
-          sendProgress(sessionId, 'Starting AI image generation process...');
+          if (!description) {
+            throw new Error('Failed to generate description');
+          }
+
+          sendProgress(sessionId, 'Remixing description for AI generation...');
+
+          // Remix the description for AI generation
+          const remixedPrompt = await remixCaption(description);
+          console.log('Remixed prompt:', remixedPrompt);
+          
+          sendProgress(sessionId, 'Starting AI image generation with DALL-E 3...');
           
           try {
-            // Generate AI image using SDXL with progress updates
-            console.log('Starting SDXL image generation with description:', description);
-            const aiImageUrl = await generateAIImage(description, (message) => {
-              console.log('SDXL progress:', message);
+            // Generate AI image using DALL-E 3 with progress updates
+            console.log('Starting DALL-E 3 image generation with prompt:', remixedPrompt);
+            const aiImageUrl = await generateAIImage(remixedPrompt, (message) => {
+              console.log('DALL-E 3 progress:', message);
               sendProgress(sessionId, message);
             });
+
+            // If generation was skipped due to quota, handle gracefully
+            if (!aiImageUrl) {
+              console.log('AI image generation skipped');
+              sendProgress(sessionId, 'AI image generation skipped due to API limits. Please try again later.');
+              return res.status(429).json({ 
+                error: 'AI image generation skipped due to API limits',
+                humanImageURL: humanUploadResult.secure_url,
+                description
+              });
+            }
+
             console.log('AI image generated:', aiImageUrl);
 
             sendProgress(sessionId, 'Finding next available date for the pair...');
@@ -307,7 +331,12 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
                 console.log('Saving to database with data:', {
                   scheduledDate: targetDate,
                   humanImageURL: humanUploadResult.secure_url,
-                  aiImageURL: aiImageUrl
+                  aiImageURL: aiImageUrl,
+                  metadata: {
+                    originalDescription: description,
+                    remixedPrompt,
+                    generatedAt: new Date()
+                  }
                 });
 
                 // Create or update MongoDB document for this date
@@ -319,7 +348,8 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
                         humanImageURL: humanUploadResult.secure_url,
                         aiImageURL: aiImageUrl,
                         metadata: {
-                          description,
+                          originalDescription: description,
+                          remixedPrompt,
                           generatedAt: new Date()
                         }
                       }
@@ -347,7 +377,11 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
                   scheduledDate: targetDate,
                   pair: {
                     humanImageURL: humanUploadResult.secure_url,
-                    aiImageURL: aiImageUrl
+                    aiImageURL: aiImageUrl,
+                    metadata: {
+                      originalDescription: description,
+                      remixedPrompt
+                    }
                   },
                   imagePairDoc
                 });
@@ -394,41 +428,6 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
     });
   }
 });
-
-// Helper function to generate image description
-const generateImageDescription = async (imageUrl) => {
-  try {
-    console.log('Generating description for image:', imageUrl);
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "user",
-          content: [
-            { 
-              type: "text", 
-              text: "Describe this artwork in detail, focusing on its artistic style, composition, and subject matter. Be specific but concise." 
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: imageUrl
-              }
-            }
-          ],
-        },
-      ],
-      max_tokens: 150,
-    });
-
-    const description = response.choices[0].message.content.trim();
-    console.log('Generated description:', description);
-    return description;
-  } catch (error) {
-    console.error('Error generating description:', error);
-    throw new Error(`Failed to generate description: ${error.message}`);
-  }
-};
 
 // Get image pairs for a date
 router.get('/get-image-pairs-by-date/:date', async (req, res) => {
