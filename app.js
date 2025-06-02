@@ -37,10 +37,10 @@ app.use(cors({
         : [...otherOrigins], // ✅ Now `otherOrigins` is properly defined
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    exposedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    maxAge: 86400 // Cache preflight requests for 24 hours
 }));
-
-
 
 // Middleware to parse JSON and URL-encoded data
 app.use(express.json());
