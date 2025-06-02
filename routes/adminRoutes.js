@@ -11,6 +11,7 @@ const adminController = require('../controllers/adminController');
 const sharp = require('sharp');
 const OpenAI = require('openai');
 const { generateAIImage } = require('../utils/aiGeneration');
+const jwt = require('jsonwebtoken');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -185,6 +186,19 @@ const sendProgress = (sessionId, message) => {
 // Progress updates endpoint
 router.get('/progress-updates/:sessionId', (req, res) => {
   const sessionId = req.params.sessionId;
+  const token = req.query.token;
+
+  // Verify token
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.role !== 'admin') {
+      res.status(403).end();
+      return;
+    }
+  } catch (error) {
+    res.status(401).end();
+    return;
+  }
   
   // Set headers for SSE
   res.writeHead(200, {
@@ -386,7 +400,7 @@ const generateImageDescription = async (imageUrl) => {
   try {
     console.log('Generating description for image:', imageUrl);
     const response = await openai.chat.completions.create({
-      model: "gpt-4-vision-preview",
+      model: "gpt-4-vision-preview-v2",
       messages: [
         {
           role: "user",
@@ -397,7 +411,7 @@ const generateImageDescription = async (imageUrl) => {
             },
             {
               type: "image_url",
-              url: imageUrl // Changed from image_url to url as per new SDK
+              url: imageUrl
             }
           ],
         },
