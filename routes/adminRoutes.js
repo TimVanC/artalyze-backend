@@ -2,7 +2,7 @@
 const express = require('express');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
-const mongoose = require('mongoose'); // ✅ Fix: Import mongoose
+const mongoose = require('mongoose');
 const ImagePair = require('../models/ImagePair');
 const { authenticateToken, authorizeAdmin } = require('../middleware/authMiddleware');
 const router = express.Router();
@@ -18,13 +18,29 @@ const upload = multer({ storage });
 const collectionName = process.env.NODE_ENV === "staging" ? "staging_imagePairs" : "imagePairs";
 const ImagePairCollection = mongoose.model(collectionName, ImagePair.schema);
 
-// ✅ Ensure `ImagePairCollection` is available to all routes if needed
+// Ensure authentication and admin access for all routes except login
+router.use((req, res, next) => {
+  if (req.path === '/login') {
+    return next();
+  }
+  authenticateToken(req, res, () => {
+    authorizeAdmin(req, res, next);
+  });
+});
+
+// Ensure ImagePairCollection is available to all routes
 router.use((req, res, next) => {
   req.ImagePairCollection = ImagePairCollection;
   next();
 });
 
-// Cloudinary setup (ensure environment variables are configured)
+// Verify Cloudinary configuration
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+  console.error('Missing Cloudinary configuration');
+  process.exit(1);
+}
+
+// Cloudinary setup
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -129,10 +145,6 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
 router.post('/upload-human-image', upload.single('humanImage'), async (req, res) => {
   try {
     const { scheduledDate } = req.body;
-    if (!scheduledDate) {
-      return res.status(400).json({ error: 'Scheduled date must be provided.' });
-    }
-
     const humanImage = req.file;
     if (!humanImage) {
       return res.status(400).json({ error: 'Human image must be provided.' });
@@ -148,26 +160,49 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
       return res.status(500).json({ error: 'Failed to upload image to Cloudinary' });
     }
 
-    // Create or update MongoDB document for this date
-    const date = new Date(scheduledDate);
-    date.setUTCHours(5, 0, 0, 0);
+    let targetDate;
+    if (scheduledDate) {
+      // If date is provided, use it
+      targetDate = new Date(scheduledDate);
+      targetDate.setUTCHours(5, 0, 0, 0);
+    } else {
+      // Find the next available date that needs pairs
+      targetDate = new Date();
+      targetDate.setUTCHours(5, 0, 0, 0);
 
-    // Check if document exists for this date
-    let imagePairDoc = await ImagePairCollection.findOne({ scheduledDate: date });
+      let foundDate = false;
+      while (!foundDate) {
+        // Check if this date has less than 5 pending images
+        const existingDoc = await ImagePairCollection.findOne({ 
+          scheduledDate: targetDate,
+          $where: "this.pendingHumanImages.length < 5"
+        });
+
+        if (existingDoc || !(await ImagePairCollection.findOne({ scheduledDate: targetDate }))) {
+          foundDate = true;
+        } else {
+          // Move to next day
+          targetDate.setDate(targetDate.getDate() + 1);
+        }
+      }
+    }
+
+    // Create or update MongoDB document for this date
+    let imagePairDoc = await ImagePairCollection.findOne({ scheduledDate: targetDate });
     
     if (!imagePairDoc) {
       // Create new document if it doesn't exist
       imagePairDoc = await ImagePairCollection.create({
-        scheduledDate: date,
-        pairs: [], // Start with empty pairs array
-        pendingHumanImages: [], // Array to track uploaded human images
+        scheduledDate: targetDate,
+        pairs: [],
+        pendingHumanImages: [],
         status: 'pending'
       });
     }
 
     // Add the human image URL to pendingHumanImages array
     imagePairDoc = await ImagePairCollection.findOneAndUpdate(
-      { scheduledDate: date },
+      { scheduledDate: targetDate },
       { 
         $push: { 
           pendingHumanImages: {
@@ -183,6 +218,7 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
     res.json({ 
       message: 'Human image uploaded successfully',
       imageUrl: humanUploadResult.secure_url,
+      scheduledDate: targetDate,
       imagePairDoc
     });
 
@@ -212,13 +248,17 @@ router.get('/get-image-pairs-by-date/:date', async (req, res) => {
     });
 
     if (!imagePairs) {
-      return res.status(404).json({ error: 'No image pairs found for this date' });
+      return res.json({ 
+        pairs: [],
+        pendingHumanImages: [],
+        status: 'pending'
+      });
     }
 
-    res.status(200).json(imagePairs);
+    res.json(imagePairs);
   } catch (error) {
     console.error('Error fetching image pairs:', error);
-    res.status(500).json({ message: 'Failed to fetch image pairs' });
+    res.status(500).json({ error: 'Failed to fetch image pairs' });
   }
 });
 
