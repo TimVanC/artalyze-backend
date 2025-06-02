@@ -192,11 +192,21 @@ router.get('/progress-updates/:sessionId', (req, res) => {
   // Verify token
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.role !== 'admin') {
+    if (!decoded || decoded.role !== 'admin') {
+      console.error('Invalid token or not admin:', decoded);
       res.status(403).end();
       return;
     }
+
+    // Check token expiration
+    const now = Math.floor(Date.now() / 1000);
+    if (decoded.exp && decoded.exp < now) {
+      console.error('Token expired:', decoded);
+      res.status(401).end();
+      return;
+    }
   } catch (error) {
+    console.error('Token verification error:', error);
     res.status(401).end();
     return;
   }
@@ -205,7 +215,11 @@ router.get('/progress-updates/:sessionId', (req, res) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive'
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': process.env.NODE_ENV === 'staging' 
+      ? 'https://staging-admin.artalyze.app'
+      : process.env.ADMIN_FRONTEND_URL,
+    'Access-Control-Allow-Credentials': 'true'
   });
 
   // Store the response object in the global map
@@ -217,6 +231,9 @@ router.get('/progress-updates/:sessionId', (req, res) => {
       global.progressStreams.delete(sessionId);
     }
   });
+
+  // Send initial message
+  sendProgress(sessionId, 'Connected to server...');
 });
 
 // Upload human image for automated pairing
