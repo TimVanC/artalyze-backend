@@ -400,7 +400,7 @@ const generateImageDescription = async (imageUrl) => {
   try {
     console.log('Generating description for image:', imageUrl);
     const response = await openai.chat.completions.create({
-      model: "gpt-4-vision-preview",
+      model: "gpt-4o",
       messages: [
         {
           role: "user",
@@ -411,8 +411,9 @@ const generateImageDescription = async (imageUrl) => {
             },
             {
               type: "image_url",
-              url: imageUrl,
-              detail: "high"
+              image_url: {
+                url: imageUrl
+              }
             }
           ],
         },
