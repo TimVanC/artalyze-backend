@@ -7,17 +7,46 @@ const openai = new OpenAI({
 
 /**
  * Remixes a caption into a unique prompt using GPT-4o
- * @param {string} caption - The original caption
- * @returns {Promise<string>} - The remixed prompt
+ * @param {Object} params - Input parameters
+ * @param {string} params.description - The original description
+ * @param {string} params.styleAnalysis - Style analysis text
+ * @param {Object} params.metadata - Style metadata
+ * @returns {Promise<Object>} - The remixed prompt and metadata
  */
-const remixCaption = async (caption) => {
+const remixCaption = async ({ description, styleAnalysis, metadata }) => {
   try {
+    // First, get style-specific imperfections
+    const imperfectionsResponse = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: "You are an expert in artistic techniques and imperfections. Your role is to suggest natural, medium-appropriate imperfections that would make an artwork feel more authentically human-made."
+        },
+        {
+          role: "user",
+          content: `Given this artwork's style:
+Medium: ${metadata.medium}
+Style: ${metadata.style}
+Techniques: ${metadata.techniques.join(', ')}
+
+What specific imperfections or human elements would make a similar piece feel authentically hand-made? 
+Focus on 2-3 key imperfections that would be natural for this medium and style.`
+        }
+      ],
+      max_tokens: 150,
+      temperature: 0.7
+    });
+
+    const suggestedImperfections = imperfectionsResponse.choices[0].message.content.trim();
+
+    // Now, generate the final prompt
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: `You are an expert art prompt engineer. Your goal is to create prompts that maintain artistic fidelity while introducing creative variations.
+          content: `You are an expert art prompt engineer who understands the beauty of human imperfection in art. Your goal is to create prompts that maintain artistic fidelity while introducing natural, human-like variations and imperfections.
 
 Key rules:
 1. NEVER use "turtle" as a subject - it's overused
@@ -25,41 +54,70 @@ Key rules:
 3. Maintain the exact same artistic medium and style
 4. Keep color and setting changes subtle and artistically relevant
 5. Vary sentence structure - avoid starting with "This artwork features..."
-6. Preserve aspect ratio and composition type`
+6. Preserve aspect ratio and composition type
+7. Reference similar artists and styles from the metadata
+8. Incorporate suggested imperfections naturally`
         },
         {
           role: "user",
-          content: `Original artwork description: '${caption}'
+          content: `Original artwork information:
+Description: ${description}
+Style Analysis: ${styleAnalysis}
+Medium: ${metadata.medium}
+Style: ${metadata.style}
+Artists: ${metadata.artists.join(', ')}
+Suggested Imperfections: ${suggestedImperfections}
 
 Create a remixed version that:
-1. Maintains the exact medium (e.g., if it's a pencil sketch, keep it a pencil sketch)
-2. Preserves the artistic style and technique
-3. Changes the subject to something contextually appropriate:
-   - If it's an animal → use a different species of similar size/type
-   - If it's a person → change pose/activity but keep human
-   - If it's an object → use a similar object in function/scale
-4. Makes minimal, artistically relevant changes to colors/setting
-5. Uses varied, natural language (avoid repetitive phrasing)
+1. Begins with a critic-style interpretation of the intended artistic approach
+2. Maintains the exact medium and technique
+3. References similar artists or styles when relevant
+4. Changes the subject to something contextually appropriate
+5. Incorporates the suggested imperfections naturally
+6. Uses varied, natural language
 
-Keep the prompt concise and vivid, under 100 words.`
+Format the response as a JSON object:
+{
+  "criticalInterpretation": "How the piece should be interpreted",
+  "mainPrompt": "The main DALL-E prompt",
+  "imperfectionsNote": "Specific imperfections to include"
+}`
         }
       ],
-      max_tokens: 150,
+      max_tokens: 500,
       temperature: 0.8
     });
 
-    return response.choices[0].message.content.trim();
+    const promptData = JSON.parse(response.choices[0].message.content.trim());
+    
+    // Combine all elements into the final prompt
+    const finalPrompt = `${promptData.criticalInterpretation}
+
+${promptData.mainPrompt}
+
+Technical note: ${promptData.imperfectionsNote}`;
+
+    return {
+      prompt: finalPrompt,
+      metadata: {
+        ...metadata,
+        criticalInterpretation: promptData.criticalInterpretation,
+        suggestedImperfections: suggestedImperfections
+      }
+    };
   } catch (error) {
     console.error('Error remixing caption:', error);
-    // Return original caption if remix fails
-    return caption;
+    return {
+      prompt: description,
+      metadata: metadata
+    };
   }
 };
 
 /**
- * Generates a description of an image using GPT-4o
+ * Generates a description and style analysis of an image using GPT-4o
  * @param {string} imageUrl - URL of the image to describe
- * @returns {Promise<string>} - The generated description
+ * @returns {Promise<Object>} - The generated description and style metadata
  */
 const generateImageDescription = async (imageUrl) => {
   try {
@@ -68,22 +126,38 @@ const generateImageDescription = async (imageUrl) => {
       messages: [
         {
           role: "system",
-          content: "You are an expert art analyst. Analyze artworks in detail, focusing on medium, style, composition, and artistic elements. Be precise and thorough in your descriptions."
+          content: `You are an expert art critic and historian. Analyze artworks in detail, focusing on medium, style, composition, and artistic elements. Pay special attention to identifying artistic influences and stylistic similarities to known artists. Be precise and thorough in your analysis.`
         },
         {
           role: "user",
           content: [
             { 
               type: "text", 
-              text: `Analyze this artwork and provide a detailed description covering:
-1. Medium and technique (e.g., oil painting, watercolor, digital art, photograph, sketch)
-2. Artistic style (e.g., realistic, abstract, impressionist, cartoon)
-3. Subject matter and composition
-4. Color palette and lighting
-5. Texture and brushwork (if applicable)
-6. Mood and atmosphere
+              text: `Analyze this artwork and provide:
 
-Keep the description clear and concise, under 100 words.` 
+1. DESCRIPTION (under 100 words):
+   - Medium and technique
+   - Subject matter and composition
+   - Color palette and lighting
+   - Texture and brushwork
+   - Mood and atmosphere
+
+2. STYLE ANALYSIS:
+   - Primary artistic style (e.g., Impressionist, Baroque, Modern)
+   - Notable techniques or approaches
+   - Similar artists or artistic movements
+   - Distinctive stylistic elements
+
+3. METADATA (in JSON format):
+   {
+     "medium": "specific medium used",
+     "style": "primary artistic style",
+     "artists": ["similar artists"],
+     "techniques": ["notable techniques"],
+     "era": "artistic period if applicable"
+   }
+
+Provide the description and style analysis in natural language, followed by the structured metadata.` 
             },
             {
               type: "image_url",
@@ -94,11 +168,26 @@ Keep the description clear and concise, under 100 words.`
           ],
         },
       ],
-      max_tokens: 200,
+      max_tokens: 500,
       temperature: 0.7
     });
 
-    return response.choices[0].message.content.trim();
+    const fullResponse = response.choices[0].message.content.trim();
+    
+    // Split response into parts
+    const parts = fullResponse.split(/\d\.\s+/);
+    const description = parts[1]?.trim() || '';
+    const styleAnalysis = parts[2]?.trim() || '';
+    
+    // Extract metadata JSON
+    const metadataMatch = fullResponse.match(/{[\s\S]*}/);
+    const metadata = metadataMatch ? JSON.parse(metadataMatch[0]) : {};
+
+    return {
+      description,
+      styleAnalysis,
+      metadata
+    };
   } catch (error) {
     console.error('Error generating description:', error);
     throw new Error(`Failed to generate description: ${error.message}`);

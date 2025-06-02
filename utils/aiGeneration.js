@@ -54,7 +54,15 @@ const validateImage = async (imageUrl) => {
   }
 };
 
-const generateAIImage = async (description, progressCallback = null) => {
+/**
+ * Generates an AI image using enhanced style-aware prompts
+ * @param {Object} params - Generation parameters
+ * @param {string} params.prompt - The enhanced prompt
+ * @param {Object} params.metadata - Style metadata
+ * @param {Function} [progressCallback] - Optional callback for progress updates
+ * @returns {Promise<string>} - The generated image URL
+ */
+const generateAIImage = async ({ prompt, metadata }, progressCallback = null) => {
   let lastError = null;
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -63,14 +71,19 @@ const generateAIImage = async (description, progressCallback = null) => {
         progressCallback(`Attempt ${attempt}: Generating AI image with DALL-E 3...`);
       }
 
+      // Adjust quality and style based on metadata
+      const quality = metadata.medium === 'photograph' ? 'hd' : 'standard';
+      const style = metadata.style?.toLowerCase().includes('realistic') ? 'vivid' : 'natural';
+
       // Generate image with DALL-E 3
       const response = await openai.images.generate({
         model: "dall-e-3",
-        prompt: description,
+        prompt: prompt,
         n: 1,
         response_format: "url",
-        quality: "hd",
-        style: "vivid"
+        quality,
+        style,
+        size: determineImageSize(metadata.medium)
       });
 
       const imageUrl = response.data[0].url;
@@ -83,19 +96,17 @@ const generateAIImage = async (description, progressCallback = null) => {
       const validation = await validateImage(imageUrl);
       if (!validation.isValid) {
         console.warn('Image validation issues:', validation.issues);
-        // Continue anyway since DALL-E 3 images should be reliable
       }
 
       if (progressCallback) {
         progressCallback('Image validated, uploading to Cloudinary...');
       }
 
-      // Upload validated image to Cloudinary
-      const uploadResponse = await cloudinary.uploader.upload(imageUrl, {
-        folder: 'artalyze/aiImages',
-        format: 'webp',
-        quality: 'auto:best',
-      });
+      // Apply medium-specific processing
+      const uploadOptions = getCloudinaryOptions(metadata.medium);
+
+      // Upload processed image to Cloudinary
+      const uploadResponse = await cloudinary.uploader.upload(imageUrl, uploadOptions);
 
       if (progressCallback) {
         progressCallback('Process completed successfully');
@@ -107,13 +118,11 @@ const generateAIImage = async (description, progressCallback = null) => {
       lastError = error;
       console.error(`Attempt ${attempt} failed:`, error);
 
-      // Handle rate limiting and quota errors
       if (error.status === 429 || (error.error?.type === 'quota_exceeded')) {
         console.error('Rate limit or quota exceeded:', error);
         if (progressCallback) {
           progressCallback('API quota exceeded. Skipping generation.');
         }
-        // Return null to indicate generation was skipped
         return null;
       }
 
@@ -128,9 +137,65 @@ const generateAIImage = async (description, progressCallback = null) => {
     }
   }
 
-  // If we reach here, all attempts failed
   console.error(`Failed to generate AI image after ${MAX_RETRIES} attempts:`, lastError);
   return null;
+};
+
+/**
+ * Determines appropriate image size based on medium
+ * @param {string} medium - The artwork medium
+ * @returns {string} - DALL-E size parameter
+ */
+const determineImageSize = (medium) => {
+  switch (medium?.toLowerCase()) {
+    case 'photograph':
+    case 'digital art':
+      return '1024x1024';
+    case 'poster':
+    case 'flyer':
+      return '1024x1792';
+    default:
+      return '1024x1024';
+  }
+};
+
+/**
+ * Gets Cloudinary upload options based on medium
+ * @param {string} medium - The artwork medium
+ * @returns {Object} - Cloudinary upload options
+ */
+const getCloudinaryOptions = (medium) => {
+  const baseOptions = {
+    folder: 'artalyze/aiImages',
+    format: 'webp',
+    quality: 'auto:best',
+  };
+
+  switch (medium?.toLowerCase()) {
+    case 'pencil sketch':
+    case 'charcoal':
+      return {
+        ...baseOptions,
+        effect: 'art:zorro',
+      };
+    case 'watercolor':
+      return {
+        ...baseOptions,
+        effect: 'art:athena',
+      };
+    case 'oil painting':
+      return {
+        ...baseOptions,
+        effect: 'oil_paint:100',
+      };
+    case 'photograph':
+      return {
+        ...baseOptions,
+        effect: 'improve',
+      };
+    default:
+      return baseOptions;
+  }
 };
 
 module.exports = {
