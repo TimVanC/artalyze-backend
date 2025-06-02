@@ -1,4 +1,6 @@
 const OpenAI = require('openai');
+const sharp = require('sharp');
+const axios = require('axios');
 
 // Initialize OpenAI with API key
 const openai = new OpenAI({
@@ -29,6 +31,7 @@ const remixCaption = async ({ description, styleAnalysis, metadata }) => {
 Medium: ${metadata.medium}
 Style: ${metadata.style}
 Techniques: ${metadata.techniques.join(', ')}
+Dimensions: ${metadata.dimensions.width}x${metadata.dimensions.height} (${metadata.dimensions.orientation})
 
 What specific imperfections or human elements would make a similar piece feel authentically hand-made? 
 Focus on 2-3 key imperfections that would be natural for this medium and style.`
@@ -56,7 +59,8 @@ Key rules:
 5. Vary sentence structure - avoid starting with "This artwork features..."
 6. Preserve aspect ratio and composition type
 7. Reference similar artists and styles from the metadata
-8. Incorporate suggested imperfections naturally`
+8. Incorporate suggested imperfections naturally
+9. Maintain the original orientation and approximate proportions`
         },
         {
           role: "user",
@@ -66,6 +70,7 @@ Style Analysis: ${styleAnalysis}
 Medium: ${metadata.medium}
 Style: ${metadata.style}
 Artists: ${metadata.artists.join(', ')}
+Dimensions: ${metadata.dimensions.width}x${metadata.dimensions.height} (${metadata.dimensions.orientation}, aspect ratio ${metadata.dimensions.aspectRatio.toFixed(2)})
 Suggested Imperfections: ${suggestedImperfections}
 
 Create a remixed version that:
@@ -75,12 +80,14 @@ Create a remixed version that:
 4. Changes the subject to something contextually appropriate
 5. Incorporates the suggested imperfections naturally
 6. Uses varied, natural language
+7. Maintains the ${metadata.dimensions.orientation} orientation with ${metadata.dimensions.aspectRatio.toFixed(2)} aspect ratio
 
 Format the response as a JSON object:
 {
   "criticalInterpretation": "How the piece should be interpreted",
   "mainPrompt": "The main DALL-E prompt",
-  "imperfectionsNote": "Specific imperfections to include"
+  "imperfectionsNote": "Specific imperfections to include",
+  "dimensions": "${metadata.dimensions.width}x${metadata.dimensions.height}"
 }`
         }
       ],
@@ -95,7 +102,9 @@ Format the response as a JSON object:
 
 ${promptData.mainPrompt}
 
-Technical note: ${promptData.imperfectionsNote}`;
+Technical note: ${promptData.imperfectionsNote}
+
+Dimensions: ${promptData.dimensions}`;
 
     return {
       prompt: finalPrompt,
@@ -115,12 +124,40 @@ Technical note: ${promptData.imperfectionsNote}`;
 };
 
 /**
+ * Analyzes image dimensions and calculates aspect ratio
+ * @param {string} imageUrl - URL of the image to analyze
+ * @returns {Promise<Object>} - Image dimension metadata
+ */
+const analyzeImageDimensions = async (imageUrl) => {
+  try {
+    const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+    const buffer = Buffer.from(response.data);
+    const metadata = await sharp(buffer).metadata();
+    
+    return {
+      width: metadata.width,
+      height: metadata.height,
+      aspectRatio: metadata.width / metadata.height,
+      orientation: metadata.width > metadata.height ? 'landscape' : 
+                  metadata.width < metadata.height ? 'portrait' : 
+                  'square'
+    };
+  } catch (error) {
+    console.error('Error analyzing image dimensions:', error);
+    return null;
+  }
+};
+
+/**
  * Generates a description and style analysis of an image using GPT-4o
  * @param {string} imageUrl - URL of the image to describe
  * @returns {Promise<Object>} - The generated description and style metadata
  */
 const generateImageDescription = async (imageUrl) => {
   try {
+    // First analyze image dimensions
+    const dimensionData = await analyzeImageDimensions(imageUrl);
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -133,7 +170,7 @@ const generateImageDescription = async (imageUrl) => {
           content: [
             { 
               type: "text", 
-              text: `Analyze this artwork and provide:
+              text: `Analyze this ${dimensionData?.orientation || ''} artwork and provide:
 
 1. DESCRIPTION (under 100 words):
    - Medium and technique
@@ -154,7 +191,13 @@ const generateImageDescription = async (imageUrl) => {
      "style": "primary artistic style",
      "artists": ["similar artists"],
      "techniques": ["notable techniques"],
-     "era": "artistic period if applicable"
+     "era": "artistic period if applicable",
+     "dimensions": {
+       "width": ${dimensionData?.width || 'unknown'},
+       "height": ${dimensionData?.height || 'unknown'},
+       "aspectRatio": ${dimensionData?.aspectRatio?.toFixed(2) || 'unknown'},
+       "orientation": "${dimensionData?.orientation || 'unknown'}"
+     }
    }
 
 Provide the description and style analysis in natural language, followed by the structured metadata.` 
@@ -182,6 +225,11 @@ Provide the description and style analysis in natural language, followed by the 
     // Extract metadata JSON
     const metadataMatch = fullResponse.match(/{[\s\S]*}/);
     const metadata = metadataMatch ? JSON.parse(metadataMatch[0]) : {};
+
+    // Ensure dimensions are included in metadata
+    if (dimensionData && (!metadata.dimensions || Object.keys(metadata.dimensions).length === 0)) {
+      metadata.dimensions = dimensionData;
+    }
 
     return {
       description,
