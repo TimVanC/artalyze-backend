@@ -3,35 +3,36 @@ const ImagePair = require('../models/ImagePair');
 const Stats = require('../models/Stats');
 const { getTodayInEST, getYesterdayInEST } = require('../utils/dateUtils');
 
-// GET endpoint to fetch the image pairs for today's puzzle
+// Get today's puzzle pairs
 exports.getDailyPuzzle = async (req, res) => {
-  console.log('getDailyPuzzle called');
   try {
-    const todayInEST = getTodayInEST();
-    console.log("Today's Date (EST):", todayInEST);
+    // Get current date in UTC and set to midnight
+    const today = new Date();
+    today.setUTCHours(5, 0, 0, 0); // 5 AM UTC = midnight EST
 
-    // Convert EST date to correct UTC range
-    const startOfDayUTC = new Date(`${todayInEST}T05:00:00Z`); // Midnight EST = 5 AM UTC
-    const endOfDayUTC = new Date(new Date(`${todayInEST}T05:00:00Z`).getTime() + 24 * 60 * 60 * 1000 - 1); // 24 hours later - 1 ms
-
-    console.log('Start of Day UTC:', startOfDayUTC);
-    console.log('End of Day UTC:', endOfDayUTC);
-
-    // Query MongoDB for puzzles within the UTC range
-    const dailyPuzzle = await ImagePair.findOne({
-      scheduledDate: { $gte: startOfDayUTC, $lte: endOfDayUTC },
+    // Find today's pairs
+    const todaysPairs = await ImagePair.findOne({
+      scheduledDate: today,
+      'pairs.0': { $exists: true } // Ensure there are completed pairs
     });
 
-    if (dailyPuzzle) {
-      console.log('Found Daily Puzzle:', dailyPuzzle);
-      res.status(200).json({ imagePairs: dailyPuzzle.pairs });
-    } else {
-      console.log('No daily puzzle found for today.');
-      res.status(404).json({ message: 'Daily puzzle not found' });
+    if (!todaysPairs || !todaysPairs.pairs.length) {
+      return res.status(404).json({ 
+        error: 'No puzzles available for today',
+        message: 'Please check back later!'
+      });
     }
+
+    // Return only the image URLs, not the entire document
+    const puzzles = todaysPairs.pairs.map(pair => ({
+      humanImageURL: pair.humanImageURL,
+      aiImageURL: pair.aiImageURL
+    }));
+
+    res.json({ puzzles });
   } catch (error) {
     console.error('Error fetching daily puzzle:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Failed to fetch daily puzzle' });
   }
 };
 

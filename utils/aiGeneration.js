@@ -55,6 +55,26 @@ const validateImage = async (imageUrl) => {
 };
 
 /**
+ * Calculates the optimal DALL-E size parameter based on dimensions
+ * @param {Object} dimensions - Image dimensions metadata
+ * @returns {string} - Optimal size parameter for DALL-E
+ */
+const calculateDallESize = (dimensions) => {
+  if (!dimensions) return '1024x1024';
+
+  // DALL-E 3 supported sizes: 1024x1024, 1024x1792, 1792x1024
+  const aspectRatio = dimensions.aspectRatio || 1;
+  
+  if (aspectRatio > 1.6) { // Landscape
+    return '1792x1024';
+  } else if (aspectRatio < 0.6) { // Portrait
+    return '1024x1792';
+  } else { // Near square
+    return '1024x1024';
+  }
+};
+
+/**
  * Generates an AI image using enhanced style-aware prompts
  * @param {Object} params - Generation parameters
  * @param {string} params.prompt - The enhanced prompt
@@ -74,6 +94,7 @@ const generateAIImage = async ({ prompt, metadata }, progressCallback = null) =>
       // Adjust quality and style based on metadata
       const quality = metadata.medium === 'photograph' ? 'hd' : 'standard';
       const style = metadata.style?.toLowerCase().includes('realistic') ? 'vivid' : 'natural';
+      const size = calculateDallESize(metadata.dimensions);
 
       // Generate image with DALL-E 3
       const response = await openai.images.generate({
@@ -83,7 +104,7 @@ const generateAIImage = async ({ prompt, metadata }, progressCallback = null) =>
         response_format: "url",
         quality,
         style,
-        size: determineImageSize(metadata.medium)
+        size
       });
 
       const imageUrl = response.data[0].url;
@@ -102,8 +123,15 @@ const generateAIImage = async ({ prompt, metadata }, progressCallback = null) =>
         progressCallback('Image validated, uploading to Cloudinary...');
       }
 
-      // Apply medium-specific processing
-      const uploadOptions = getCloudinaryOptions(metadata.medium);
+      // Apply medium-specific processing with preserved aspect ratio
+      const uploadOptions = {
+        ...getCloudinaryOptions(metadata.medium),
+        aspect_ratio: metadata.dimensions?.aspectRatio || 1,
+        transformation: [
+          { width: "auto", crop: "scale" }, // Ensure width scales proportionally
+          { fetch_format: "auto", quality: "auto" } // Optimize delivery format and quality
+        ]
+      };
 
       // Upload processed image to Cloudinary
       const uploadResponse = await cloudinary.uploader.upload(imageUrl, uploadOptions);
@@ -142,24 +170,6 @@ const generateAIImage = async ({ prompt, metadata }, progressCallback = null) =>
 };
 
 /**
- * Determines appropriate image size based on medium
- * @param {string} medium - The artwork medium
- * @returns {string} - DALL-E size parameter
- */
-const determineImageSize = (medium) => {
-  switch (medium?.toLowerCase()) {
-    case 'photograph':
-    case 'digital art':
-      return '1024x1024';
-    case 'poster':
-    case 'flyer':
-      return '1024x1792';
-    default:
-      return '1024x1024';
-  }
-};
-
-/**
  * Gets Cloudinary upload options based on medium
  * @param {string} medium - The artwork medium
  * @returns {Object} - Cloudinary upload options
@@ -169,6 +179,9 @@ const getCloudinaryOptions = (medium) => {
     folder: 'artalyze/aiImages',
     format: 'webp',
     quality: 'auto:best',
+    flags: 'preserve_transparency',
+    fetch_format: 'auto',
+    crop: 'scale', // Changed from 'fill' to 'scale' to preserve aspect ratio
   };
 
   switch (medium?.toLowerCase()) {
