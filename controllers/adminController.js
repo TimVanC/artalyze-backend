@@ -20,8 +20,8 @@ exports.adminLogin = async (req, res) => {
     return res.status(401).json({ message: "Invalid credentials" });
   }
 
-  // Generate JWT token
-  const token = jwt.sign({ role: "admin" }, process.env.JWT_SECRET, { expiresIn: "1h" });
+  // Generate JWT token without expiration for admin
+  const token = jwt.sign({ role: "admin" }, process.env.JWT_SECRET);
 
   res.json({ token });
 };

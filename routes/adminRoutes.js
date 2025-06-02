@@ -187,7 +187,15 @@ const sendProgress = (sessionId, message) => {
 // Progress updates endpoint
 router.get('/progress-updates/:sessionId', (req, res) => {
   const sessionId = req.params.sessionId;
-  const token = req.query.token;
+  
+  // Get token from query string or Authorization header
+  const token = req.query.token || req.headers.authorization?.split(" ")[1];
+  
+  if (!token) {
+    console.error('No token provided');
+    res.status(401).end();
+    return;
+  }
 
   // Verify token
   try {
@@ -198,13 +206,7 @@ router.get('/progress-updates/:sessionId', (req, res) => {
       return;
     }
 
-    // Check token expiration
-    const now = Math.floor(Date.now() / 1000);
-    if (decoded.exp && decoded.exp < now) {
-      console.error('Token expired:', decoded);
-      res.status(401).end();
-      return;
-    }
+    // Don't check expiration for admin tokens
   } catch (error) {
     console.error('Token verification error:', error);
     res.status(401).end();
