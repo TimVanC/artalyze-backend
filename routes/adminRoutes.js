@@ -176,96 +176,140 @@ const sendProgress = (sessionId, message) => {
 router.post('/upload-human-image', upload.single('humanImage'), async (req, res) => {
   const sessionId = req.body.sessionId;
   try {
+    console.log('Starting upload process...');
+    
     const humanImage = req.file;
     if (!humanImage) {
+      console.error('No image file provided');
       return res.status(400).json({ error: 'Human image must be provided.' });
     }
 
+    console.log('Image received, size:', humanImage.size, 'bytes');
     sendProgress(sessionId, 'Resizing human image...');
-    // Resize image before uploading
-    const resizedBuffer = await resizeImage(humanImage.buffer);
 
-    sendProgress(sessionId, 'Uploading human image to Cloudinary...');
-    // Upload to Cloudinary's humanImages folder
-    const humanUploadResult = await uploadToCloudinary(resizedBuffer, 'artalyze/humanImages');
+    try {
+      // Resize image before uploading
+      const resizedBuffer = await resizeImage(humanImage.buffer);
+      console.log('Image resized successfully');
 
-    if (!humanUploadResult?.secure_url) {
-      return res.status(500).json({ error: 'Failed to upload image to Cloudinary' });
-    }
+      sendProgress(sessionId, 'Uploading human image to Cloudinary...');
+      
+      try {
+        // Upload to Cloudinary's humanImages folder
+        const humanUploadResult = await uploadToCloudinary(resizedBuffer, 'artalyze/humanImages');
+        console.log('Cloudinary upload successful:', humanUploadResult?.secure_url);
 
-    sendProgress(sessionId, 'Generating image description with GPT-4 Vision...');
-    // Generate image description using GPT-4 Vision
-    const description = await generateImageDescription(humanUploadResult.secure_url);
-    
-    sendProgress(sessionId, 'Starting AI image generation process...');
-    // Generate AI image using SDXL with progress updates
-    const aiImageUrl = await generateAIImage(description, (message) => {
-      sendProgress(sessionId, message);
-    });
-
-    sendProgress(sessionId, 'Finding next available date for the pair...');
-    // Find the next available date that needs pairs
-    const targetDate = new Date();
-    targetDate.setUTCHours(5, 0, 0, 0);
-
-    let foundDate = false;
-    while (!foundDate) {
-      // Check if this date has less than 5 pairs
-      const existingDoc = await ImagePairCollection.findOne({ 
-        scheduledDate: targetDate,
-        $expr: { $lt: [{ $size: "$pairs" }, 5] }
-      });
-
-      if (existingDoc || !(await ImagePairCollection.findOne({ scheduledDate: targetDate }))) {
-        foundDate = true;
-      } else {
-        // Move to next day
-        targetDate.setDate(targetDate.getDate() + 1);
-      }
-    }
-
-    sendProgress(sessionId, 'Saving pair to database...');
-    // Create or update MongoDB document for this date
-    const imagePairDoc = await ImagePairCollection.findOneAndUpdate(
-      { scheduledDate: targetDate },
-      {
-        $push: {
-          pairs: {
-            humanImageURL: humanUploadResult.secure_url,
-            aiImageURL: aiImageUrl,
-            metadata: {
-              description,
-              generatedAt: new Date()
-            }
-          }
+        if (!humanUploadResult?.secure_url) {
+          throw new Error('Failed to get secure URL from Cloudinary');
         }
-      },
-      { 
-        upsert: true, 
-        new: true,
-        setDefaultsOnInsert: true
+
+        sendProgress(sessionId, 'Generating image description with GPT-4 Vision...');
+        
+        try {
+          // Generate image description using GPT-4 Vision
+          const description = await generateImageDescription(humanUploadResult.secure_url);
+          console.log('Generated description:', description);
+          
+          sendProgress(sessionId, 'Starting AI image generation process...');
+          
+          try {
+            // Generate AI image using SDXL with progress updates
+            const aiImageUrl = await generateAIImage(description, (message) => {
+              sendProgress(sessionId, message);
+            });
+            console.log('AI image generated:', aiImageUrl);
+
+            sendProgress(sessionId, 'Finding next available date for the pair...');
+            
+            try {
+              // Find the next available date that needs pairs
+              const targetDate = new Date();
+              targetDate.setUTCHours(5, 0, 0, 0);
+
+              let foundDate = false;
+              while (!foundDate) {
+                // Check if this date has less than 5 pairs
+                const existingDoc = await ImagePairCollection.findOne({ 
+                  scheduledDate: targetDate,
+                  $expr: { $lt: [{ $size: "$pairs" }, 5] }
+                });
+
+                if (existingDoc || !(await ImagePairCollection.findOne({ scheduledDate: targetDate }))) {
+                  foundDate = true;
+                } else {
+                  // Move to next day
+                  targetDate.setDate(targetDate.getDate() + 1);
+                }
+              }
+
+              sendProgress(sessionId, 'Saving pair to database...');
+              
+              try {
+                // Create or update MongoDB document for this date
+                const imagePairDoc = await ImagePairCollection.findOneAndUpdate(
+                  { scheduledDate: targetDate },
+                  {
+                    $push: {
+                      pairs: {
+                        humanImageURL: humanUploadResult.secure_url,
+                        aiImageURL: aiImageUrl,
+                        metadata: {
+                          description,
+                          generatedAt: new Date()
+                        }
+                      }
+                    }
+                  },
+                  { 
+                    upsert: true, 
+                    new: true,
+                    setDefaultsOnInsert: true
+                  }
+                );
+
+                console.log('Successfully saved to database:', imagePairDoc._id);
+                sendProgress(sessionId, 'Process completed successfully!');
+                
+                // Close the SSE connection
+                if (global.progressStreams?.has(sessionId)) {
+                  const stream = global.progressStreams.get(sessionId);
+                  stream.end();
+                  global.progressStreams.delete(sessionId);
+                }
+
+                res.json({ 
+                  message: 'Image pair created successfully',
+                  scheduledDate: targetDate,
+                  pair: {
+                    humanImageURL: humanUploadResult.secure_url,
+                    aiImageURL: aiImageUrl
+                  },
+                  imagePairDoc
+                });
+              } catch (dbError) {
+                console.error('Database error:', dbError);
+                throw new Error(`Failed to save to database: ${dbError.message}`);
+              }
+            } catch (dateError) {
+              console.error('Date scheduling error:', dateError);
+              throw new Error(`Failed to schedule date: ${dateError.message}`);
+            }
+          } catch (aiError) {
+            console.error('AI generation error:', aiError);
+            throw new Error(`Failed to generate AI image: ${aiError.message}`);
+          }
+        } catch (descriptionError) {
+          console.error('Description generation error:', descriptionError);
+          throw new Error(`Failed to generate description: ${descriptionError.message}`);
+        }
+      } catch (uploadError) {
+        console.error('Cloudinary upload error:', uploadError);
+        throw new Error(`Failed to upload to Cloudinary: ${uploadError.message}`);
       }
-    );
-
-    sendProgress(sessionId, 'Process completed successfully!');
-    
-    // Close the SSE connection
-    if (global.progressStreams?.has(sessionId)) {
-      const stream = global.progressStreams.get(sessionId);
-      stream.end();
-      global.progressStreams.delete(sessionId);
+    } catch (resizeError) {
+      console.error('Image resize error:', resizeError);
+      throw new Error(`Failed to resize image: ${resizeError.message}`);
     }
-
-    res.json({ 
-      message: 'Image pair created successfully',
-      scheduledDate: targetDate,
-      pair: {
-        humanImageURL: humanUploadResult.secure_url,
-        aiImageURL: aiImageUrl
-      },
-      imagePairDoc
-    });
-
   } catch (error) {
     console.error('Upload Error:', error);
     sendProgress(sessionId, `Error: ${error.message}`);
@@ -277,7 +321,7 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
       global.progressStreams.delete(sessionId);
     }
     
-    res.status(500).json({ error: 'Failed to process image pair' });
+    res.status(500).json({ error: error.message || 'Failed to process image pair' });
   }
 });
 
