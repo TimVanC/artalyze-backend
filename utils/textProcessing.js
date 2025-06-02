@@ -16,18 +16,35 @@ const remixCaption = async (caption) => {
       model: "gpt-4o",
       messages: [
         {
-          role: "user",
-          content: `This is a caption of a painting: '${caption}'
+          role: "system",
+          content: `You are an expert art prompt engineer. Your goal is to create prompts that maintain artistic fidelity while introducing creative variations.
 
-Please rewrite this prompt with the following creative changes:
-1. Change the subject to something entirely different (e.g., rabbit → turtle, frog, cat, etc.).
-2. Change the setting or background (e.g., forest → kitchen, moon, ballroom, desert).
-3. Swap out any specific colors with new ones (e.g., red → teal).
-4. Keep the overall art style and tone.
-5. Keep the prompt concise and vivid, under 30 words.`
+Key rules:
+1. NEVER use "turtle" as a subject - it's overused
+2. Choose subjects that match the scale, tone, and context of the original
+3. Maintain the exact same artistic medium and style
+4. Keep color and setting changes subtle and artistically relevant
+5. Vary sentence structure - avoid starting with "This artwork features..."
+6. Preserve aspect ratio and composition type`
+        },
+        {
+          role: "user",
+          content: `Original artwork description: '${caption}'
+
+Create a remixed version that:
+1. Maintains the exact medium (e.g., if it's a pencil sketch, keep it a pencil sketch)
+2. Preserves the artistic style and technique
+3. Changes the subject to something contextually appropriate:
+   - If it's an animal → use a different species of similar size/type
+   - If it's a person → change pose/activity but keep human
+   - If it's an object → use a similar object in function/scale
+4. Makes minimal, artistically relevant changes to colors/setting
+5. Uses varied, natural language (avoid repetitive phrasing)
+
+Keep the prompt concise and vivid, under 100 words.`
         }
       ],
-      max_tokens: 100,
+      max_tokens: 150,
       temperature: 0.8
     });
 
@@ -50,11 +67,23 @@ const generateImageDescription = async (imageUrl) => {
       model: "gpt-4o",
       messages: [
         {
+          role: "system",
+          content: "You are an expert art analyst. Analyze artworks in detail, focusing on medium, style, composition, and artistic elements. Be precise and thorough in your descriptions."
+        },
+        {
           role: "user",
           content: [
             { 
               type: "text", 
-              text: "Describe this artwork in detail, focusing on its artistic style, composition, and subject matter. Be specific but concise." 
+              text: `Analyze this artwork and provide a detailed description covering:
+1. Medium and technique (e.g., oil painting, watercolor, digital art, photograph, sketch)
+2. Artistic style (e.g., realistic, abstract, impressionist, cartoon)
+3. Subject matter and composition
+4. Color palette and lighting
+5. Texture and brushwork (if applicable)
+6. Mood and atmosphere
+
+Keep the description clear and concise, under 100 words.` 
             },
             {
               type: "image_url",
@@ -65,7 +94,8 @@ const generateImageDescription = async (imageUrl) => {
           ],
         },
       ],
-      max_tokens: 150,
+      max_tokens: 200,
+      temperature: 0.7
     });
 
     return response.choices[0].message.content.trim();
