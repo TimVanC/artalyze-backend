@@ -9,8 +9,20 @@ const router = express.Router();
 const streamifier = require('streamifier');
 const adminController = require('../controllers/adminController');
 const sharp = require('sharp');
-const { Configuration, OpenAIApi } = require('openai');
+const OpenAI = require('openai');
 const { generateAIImage } = require('../utils/aiGeneration');
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// Initialize OpenAI with new SDK format
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 // Configure file upload storage
 const storage = multer.memoryStorage();
@@ -18,6 +30,7 @@ const upload = multer({ storage });
 
 // Dynamically select collection name based on environment
 const collectionName = process.env.NODE_ENV === "staging" ? "staging_imagePairs" : "imagePairs";
+console.log('Using MongoDB collection:', collectionName);
 const ImagePairCollection = mongoose.model(collectionName, ImagePair.schema);
 
 // Ensure authentication and admin access for all routes except login
@@ -42,13 +55,6 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
   process.exit(1);
 }
 
-// Cloudinary setup
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
 // Resize image while preserving aspect ratio
 const resizeImage = async (buffer) => {
   const image = sharp(buffer);
@@ -70,21 +76,37 @@ const resizeImage = async (buffer) => {
 // Upload file to Cloudinary
 const uploadToCloudinary = (fileBuffer, folderName) => {
   return new Promise((resolve, reject) => {
+    console.log('Starting Cloudinary upload to folder:', folderName);
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: folderName,
         format: "webp",
         quality: "auto:best",
+        resource_type: "image"
       },
       (error, result) => {
         if (error) {
+          console.error('Cloudinary upload error:', error);
           reject(error);
         } else {
+          console.log('Cloudinary upload successful:', {
+            publicId: result.public_id,
+            url: result.secure_url,
+            format: result.format,
+            size: result.bytes
+          });
           resolve(result);
         }
       }
     );
-    streamifier.createReadStream(fileBuffer).pipe(uploadStream);
+
+    // Handle stream errors
+    uploadStream.on('error', (error) => {
+      console.error('Cloudinary stream error:', error);
+      reject(error);
+    });
+
+    uploadStream.end(fileBuffer);
   });
 };
 
@@ -143,48 +165,64 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
   }
 });
 
-// Add SSE endpoint for progress updates
+// Initialize global progress streams map if not exists
+if (!global.progressStreams) {
+  global.progressStreams = new Map();
+}
+
+// Send progress update to client
+const sendProgress = (sessionId, message) => {
+  if (global.progressStreams?.has(sessionId)) {
+    try {
+      const res = global.progressStreams.get(sessionId);
+      res.write(`data: ${JSON.stringify({ message })}\n\n`);
+    } catch (error) {
+      console.error('Error sending progress update:', error);
+    }
+  }
+};
+
+// Progress updates endpoint
 router.get('/progress-updates/:sessionId', (req, res) => {
-  const { sessionId } = req.params;
+  const sessionId = req.params.sessionId;
   
+  // Set headers for SSE
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive'
   });
 
-  // Store the response object in a map using sessionId
-  if (!global.progressStreams) {
-    global.progressStreams = new Map();
-  }
+  // Store the response object in the global map
   global.progressStreams.set(sessionId, res);
 
+  // Clean up on client disconnect
   req.on('close', () => {
-    global.progressStreams.delete(sessionId);
+    if (global.progressStreams?.has(sessionId)) {
+      global.progressStreams.delete(sessionId);
+    }
   });
 });
-
-// Helper function to send progress updates
-const sendProgress = (sessionId, message) => {
-  if (global.progressStreams?.has(sessionId)) {
-    const res = global.progressStreams.get(sessionId);
-    res.write(`data: ${JSON.stringify({ message })}\n\n`);
-  }
-};
 
 // Upload human image for automated pairing
 router.post('/upload-human-image', upload.single('humanImage'), async (req, res) => {
   const sessionId = req.body.sessionId;
   try {
-    console.log('Starting upload process...');
+    console.log('Starting upload process with session:', sessionId);
+    console.log('Request headers:', req.headers);
     
     const humanImage = req.file;
     if (!humanImage) {
-      console.error('No image file provided');
+      console.error('No image file provided in request');
       return res.status(400).json({ error: 'Human image must be provided.' });
     }
 
-    console.log('Image received, size:', humanImage.size, 'bytes');
+    console.log('Image received:', {
+      filename: humanImage.originalname,
+      size: humanImage.size,
+      mimetype: humanImage.mimetype
+    });
+
     sendProgress(sessionId, 'Resizing human image...');
 
     try {
@@ -196,6 +234,7 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
       
       try {
         // Upload to Cloudinary's humanImages folder
+        console.log('Starting Cloudinary upload...');
         const humanUploadResult = await uploadToCloudinary(resizedBuffer, 'artalyze/humanImages');
         console.log('Cloudinary upload successful:', humanUploadResult?.secure_url);
 
@@ -207,6 +246,7 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
         
         try {
           // Generate image description using GPT-4 Vision
+          console.log('Starting GPT-4 Vision description generation...');
           const description = await generateImageDescription(humanUploadResult.secure_url);
           console.log('Generated description:', description);
           
@@ -214,7 +254,9 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
           
           try {
             // Generate AI image using SDXL with progress updates
+            console.log('Starting SDXL image generation with description:', description);
             const aiImageUrl = await generateAIImage(description, (message) => {
+              console.log('SDXL progress:', message);
               sendProgress(sessionId, message);
             });
             console.log('AI image generated:', aiImageUrl);
@@ -226,6 +268,7 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
               const targetDate = new Date();
               targetDate.setUTCHours(5, 0, 0, 0);
 
+              console.log('Finding next available date starting from:', targetDate);
               let foundDate = false;
               while (!foundDate) {
                 // Check if this date has less than 5 pairs
@@ -236,15 +279,23 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
 
                 if (existingDoc || !(await ImagePairCollection.findOne({ scheduledDate: targetDate }))) {
                   foundDate = true;
+                  console.log('Found available date:', targetDate);
                 } else {
                   // Move to next day
                   targetDate.setDate(targetDate.getDate() + 1);
+                  console.log('Moving to next date:', targetDate);
                 }
               }
 
               sendProgress(sessionId, 'Saving pair to database...');
               
               try {
+                console.log('Saving to database with data:', {
+                  scheduledDate: targetDate,
+                  humanImageURL: humanUploadResult.secure_url,
+                  aiImageURL: aiImageUrl
+                });
+
                 // Create or update MongoDB document for this date
                 const imagePairDoc = await ImagePairCollection.findOneAndUpdate(
                   { scheduledDate: targetDate },
@@ -321,41 +372,45 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
       global.progressStreams.delete(sessionId);
     }
     
-    res.status(500).json({ error: error.message || 'Failed to process image pair' });
+    // Send detailed error information
+    res.status(500).json({ 
+      error: error.message || 'Failed to process image pair',
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      details: error.details || undefined
+    });
   }
 });
 
 // Helper function to generate image description
 const generateImageDescription = async (imageUrl) => {
   try {
-    const openai = new OpenAIApi(new Configuration({
-      apiKey: process.env.OPENAI_API_KEY,
-    }));
-
-    const response = await openai.createChatCompletion({
+    console.log('Generating description for image:', imageUrl);
+    const response = await openai.chat.completions.create({
       model: "gpt-4-vision-preview",
       messages: [
         {
           role: "user",
           content: [
-            {
-              type: "text",
-              text: "Describe this artwork in detail, focusing on style, composition, and subject matter. Make it suitable for AI image generation."
+            { 
+              type: "text", 
+              text: "Describe this artwork in detail, focusing on its artistic style, composition, and subject matter. Be specific but concise." 
             },
             {
               type: "image_url",
-              image_url: imageUrl
+              url: imageUrl // Changed from image_url to url as per new SDK
             }
-          ]
-        }
+          ],
+        },
       ],
-      max_tokens: 300
+      max_tokens: 150,
     });
 
-    return response.data.choices[0].message.content;
+    const description = response.choices[0].message.content.trim();
+    console.log('Generated description:', description);
+    return description;
   } catch (error) {
-    console.error('Error generating image description:', error);
-    throw error;
+    console.error('Error generating description:', error);
+    throw new Error(`Failed to generate description: ${error.message}`);
   }
 };
 
