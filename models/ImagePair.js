@@ -6,7 +6,15 @@ const ImagePairSchema = new mongoose.Schema({
   scheduledDate: { 
     type: Date, 
     required: true,
-    unique: true 
+    unique: true,
+    validate: {
+      validator: function(value) {
+        const today = new Date();
+        today.setUTCHours(5, 0, 0, 0); // Set to midnight EST (5 AM UTC)
+        return value >= today;
+      },
+      message: 'Cannot schedule image pairs for dates before the current day'
+    }
   },
   pairs: [
     {

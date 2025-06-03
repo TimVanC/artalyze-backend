@@ -123,8 +123,18 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
       return res.status(400).json({ error: 'Scheduled date must be provided.' });
     }
 
-    const date = new Date(scheduledDate);
-    date.setUTCHours(5, 0, 0, 0);
+    // Validate that scheduledDate is not before today
+    const today = new Date();
+    today.setUTCHours(5, 0, 0, 0); // Set to midnight EST (5 AM UTC)
+    
+    const requestedDate = new Date(scheduledDate);
+    requestedDate.setUTCHours(5, 0, 0, 0);
+
+    if (requestedDate < today) {
+      return res.status(400).json({ 
+        error: 'Cannot schedule image pairs for past dates. Please choose today or a future date.' 
+      });
+    }
 
     const humanImage = req.files['humanImage']?.[0];
     const aiImage = req.files['aiImage']?.[0];
@@ -147,7 +157,7 @@ router.post('/upload-image-pair', upload.fields([{ name: 'humanImage' }, { name:
 
     // Update the database: Use `findOneAndUpdate()` with `$push`
     const updateResult = await ImagePairCollection.findOneAndUpdate(
-      { scheduledDate: date }, // Find the document by date
+      { scheduledDate: requestedDate }, // Find the document by date
       {
         $push: { 
           pairs: {
@@ -323,7 +333,14 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
             try {
               // Find the next available date that needs pairs
               const targetDate = new Date();
-              targetDate.setUTCHours(5, 0, 0, 0);
+              targetDate.setUTCHours(5, 0, 0, 0); // Set to midnight EST (5 AM UTC)
+
+              // Ensure we're not looking at dates before today
+              const today = new Date();
+              today.setUTCHours(5, 0, 0, 0);
+              if (targetDate < today) {
+                targetDate.setTime(today.getTime());
+              }
 
               console.log('Finding next available date starting from:', targetDate);
               let foundDate = false;
