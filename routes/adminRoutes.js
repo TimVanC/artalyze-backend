@@ -498,17 +498,19 @@ router.post('/regenerate-ai-image', async (req, res) => {
     }
 
     // Find the document for the given date
-    const doc = await ImagePairCollection.findOne({ scheduledDate: new Date(scheduledDate) });
+    const doc = await ImagePairCollection.findOne({ 
+      scheduledDate: new Date(scheduledDate)
+    });
     console.log('Found document:', doc);
     if (!doc) {
-      return res.status(404).json({ error: 'Image pair not found.' });
+      return res.status(404).json({ error: 'No pairs found for this date.' });
     }
 
-    // Find the specific pair
-    const pair = doc.pairs.id(pairId);
+    // Find the specific pair using MongoDB's $elemMatch
+    const pair = doc.pairs.find(p => p._id.toString() === pairId);
     console.log('Found pair:', pair);
     if (!pair) {
-      return res.status(404).json({ error: 'Pair not found.' });
+      return res.status(404).json({ error: 'Pair not found in the document.' });
     }
 
     // Generate new image description and AI image
@@ -520,17 +522,29 @@ router.post('/regenerate-ai-image', async (req, res) => {
       return res.status(429).json({ error: 'AI image generation failed. Please try again later.' });
     }
 
-    // Update the pair with new AI image
-    pair.aiImageURL = newAiImageUrl;
-    pair.metadata = {
-      ...pair.metadata,
-      description: imageAnalysis.description,
-      styleAnalysis: imageAnalysis.styleAnalysis,
-      remixedPrompt,
-      regeneratedAt: new Date()
-    };
+    // Update the specific pair in the array
+    const updateResult = await ImagePairCollection.findOneAndUpdate(
+      { 
+        scheduledDate: new Date(scheduledDate),
+        'pairs._id': mongoose.Types.ObjectId(pairId)
+      },
+      {
+        $set: {
+          'pairs.$.aiImageURL': newAiImageUrl,
+          'pairs.$.metadata': {
+            description: imageAnalysis.description,
+            styleAnalysis: imageAnalysis.styleAnalysis,
+            remixedPrompt,
+            regeneratedAt: new Date()
+          }
+        }
+      },
+      { new: true }
+    );
 
-    await doc.save();
+    if (!updateResult) {
+      return res.status(404).json({ error: 'Failed to update the pair.' });
+    }
 
     res.json({ 
       message: 'AI image regenerated successfully',
@@ -556,15 +570,30 @@ router.delete('/delete-pair', async (req, res) => {
       return res.status(400).json({ error: 'Pair ID and scheduled date are required.' });
     }
 
+    // First check if the document exists
+    const doc = await ImagePairCollection.findOne({ 
+      scheduledDate: new Date(scheduledDate)
+    });
+    
+    if (!doc) {
+      return res.status(404).json({ error: 'No pairs found for this date.' });
+    }
+
+    // Check if the pair exists before attempting to delete
+    const pairExists = doc.pairs.some(p => p._id.toString() === pairId);
+    if (!pairExists) {
+      return res.status(404).json({ error: 'Pair not found in the document.' });
+    }
+
+    // Remove the pair using $pull
     const result = await ImagePairCollection.findOneAndUpdate(
       { scheduledDate: new Date(scheduledDate) },
-      { $pull: { pairs: { _id: pairId } } },
+      { $pull: { pairs: { _id: mongoose.Types.ObjectId(pairId) } } },
       { new: true }
     );
-    console.log('Delete operation result:', result);
 
     if (!result) {
-      return res.status(404).json({ error: 'Image pair not found.' });
+      return res.status(404).json({ error: 'Failed to delete the pair.' });
     }
 
     res.json({ 
