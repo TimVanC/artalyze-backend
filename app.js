@@ -56,7 +56,7 @@ app.get("/", (req, res) => {
     res.json({ message: "Backend is running successfully!" });
 });
 
-// Mount all API routes
+// Mount all API routes first
 app.use('/api/auth', authRoutes);
 app.use('/api/game', gameRoutes);
 app.use('/api/images', imageRoutes);
@@ -64,13 +64,10 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/user', userRoutes);
 
-// Handle 404 errors for API routes
+// API 404 handler - only handle /api/* routes
 app.use('/api/*', (req, res) => {
     res.status(404).json({ error: 'API endpoint not found' });
 });
-
-// Serve static files from the uploads directory
-app.use('/uploads', express.static('uploads'));
 
 // Global error handler for uncaught exceptions
 app.use((err, req, res, next) => {
@@ -89,6 +86,9 @@ if (process.env.NODE_ENV === 'production') {
         }
     });
 }
+
+// Serve static files from the uploads directory
+app.use('/uploads', express.static('uploads'));
 
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
