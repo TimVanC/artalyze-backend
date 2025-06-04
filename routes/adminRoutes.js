@@ -198,44 +198,66 @@ const sendProgress = (sessionId, message, type = 'info') => {
 };
 
 // Progress updates endpoint
-router.get('/progress-updates/:sessionId', authenticateToken, authorizeAdmin, (req, res) => {
+router.get('/progress-updates/:sessionId', (req, res) => {
   const sessionId = req.params.sessionId;
   
-  // Set headers for SSE
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': process.env.NODE_ENV === 'staging' 
-      ? 'https://staging-admin.artalyze.app'
-      : process.env.ADMIN_FRONTEND_URL,
-    'Access-Control-Allow-Credentials': 'true'
-  });
+  // Get auth token from query parameter
+  const authHeader = req.query.auth;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.error('No valid auth token provided');
+    return res.status(401).end();
+  }
 
-  // Store the response object in the global map
-  global.progressStreams.set(sessionId, res);
-
-  // Clean up on client disconnect
-  req.on('close', () => {
-    if (global.progressStreams?.has(sessionId)) {
-      global.progressStreams.delete(sessionId);
+  const token = authHeader.split(' ')[1];
+  
+  // Verify token
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (!decoded || decoded.role !== 'admin') {
+      console.error('Invalid token or not admin:', decoded);
+      return res.status(403).end();
     }
-  });
 
-  // Send initial message
-  sendProgress(sessionId, 'Connected to server...', 'info');
+    // Set headers for SSE
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': process.env.NODE_ENV === 'staging' 
+        ? 'https://staging-admin.artalyze.app'
+        : process.env.ADMIN_FRONTEND_URL,
+      'Access-Control-Allow-Credentials': 'true'
+    });
 
-  // Keep connection alive with periodic heartbeat
-  const heartbeat = setInterval(() => {
-    if (global.progressStreams?.has(sessionId)) {
-      res.write(': heartbeat\n\n');
-    } else {
-      clearInterval(heartbeat);
-    }
-  }, 30000); // Send heartbeat every 30 seconds
+    // Store the response object in the global map
+    global.progressStreams.set(sessionId, res);
 
-  // Clean up heartbeat on disconnect
-  req.on('close', () => clearInterval(heartbeat));
+    // Clean up on client disconnect
+    req.on('close', () => {
+      if (global.progressStreams?.has(sessionId)) {
+        global.progressStreams.delete(sessionId);
+      }
+    });
+
+    // Send initial message
+    sendProgress(sessionId, 'Connected to server...', 'info');
+
+    // Keep connection alive with periodic heartbeat
+    const heartbeat = setInterval(() => {
+      if (global.progressStreams?.has(sessionId)) {
+        res.write(': heartbeat\n\n');
+      } else {
+        clearInterval(heartbeat);
+      }
+    }, 30000); // Send heartbeat every 30 seconds
+
+    // Clean up heartbeat on disconnect
+    req.on('close', () => clearInterval(heartbeat));
+
+  } catch (error) {
+    console.error('Token verification error:', error);
+    return res.status(401).end();
+  }
 });
 
 // Upload human image for automated pairing
@@ -277,7 +299,10 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
       try {
         // Generate AI image
         sendProgress(sessionId, 'Starting AI image generation...', 'info');
-        const aiImageUrl = await generateAIImage(remixedPrompt, (message) => {
+        const aiImageUrl = await generateAIImage({
+          prompt: remixedPrompt,
+          metadata: description.metadata
+        }, (message) => {
           sendProgress(sessionId, message, 'info');
         });
 
