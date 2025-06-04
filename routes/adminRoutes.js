@@ -486,7 +486,7 @@ router.get('/get-image-pairs-by-date/:date', async (req, res) => {
 });
 
 // Regenerate AI image for a pair
-router.post('/admin/regenerate-ai-image', async (req, res) => {
+router.post('/regenerate-ai-image', async (req, res) => {
   console.log('Regenerate AI endpoint called with:', {
     body: req.body,
     headers: req.headers
@@ -559,7 +559,7 @@ router.post('/admin/regenerate-ai-image', async (req, res) => {
 });
 
 // Delete an image pair
-router.delete('/admin/delete-pair', async (req, res) => {
+router.delete('/delete-pair', async (req, res) => {
   console.log('Delete pair endpoint called with:', {
     body: req.body,
     headers: req.headers
