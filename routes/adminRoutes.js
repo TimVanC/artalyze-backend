@@ -205,7 +205,7 @@ router.get('/progress-updates/:sessionId', (req, res) => {
   const authHeader = req.query.auth;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.error('No valid auth token provided');
-    return res.status(401).end();
+    return res.status(401).send('Unauthorized');
   }
 
   const token = authHeader.split(' ')[1];
@@ -215,7 +215,7 @@ router.get('/progress-updates/:sessionId', (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (!decoded || decoded.role !== 'admin') {
       console.error('Invalid token or not admin:', decoded);
-      return res.status(403).end();
+      return res.status(403).send('Forbidden');
     }
 
     // Set headers for SSE
@@ -223,9 +223,7 @@ router.get('/progress-updates/:sessionId', (req, res) => {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': process.env.NODE_ENV === 'staging' 
-        ? 'https://staging-admin.artalyze.app'
-        : process.env.ADMIN_FRONTEND_URL,
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Credentials': 'true'
     });
 
@@ -234,6 +232,7 @@ router.get('/progress-updates/:sessionId', (req, res) => {
 
     // Clean up on client disconnect
     req.on('close', () => {
+      console.log(`Client disconnected: ${sessionId}`);
       if (global.progressStreams?.has(sessionId)) {
         global.progressStreams.delete(sessionId);
       }
@@ -245,18 +244,21 @@ router.get('/progress-updates/:sessionId', (req, res) => {
     // Keep connection alive with periodic heartbeat
     const heartbeat = setInterval(() => {
       if (global.progressStreams?.has(sessionId)) {
-        res.write(': heartbeat\n\n');
+        sendProgress(sessionId, 'heartbeat', 'heartbeat');
       } else {
         clearInterval(heartbeat);
       }
-    }, 30000); // Send heartbeat every 30 seconds
+    }, 15000); // Send heartbeat every 15 seconds
 
     // Clean up heartbeat on disconnect
-    req.on('close', () => clearInterval(heartbeat));
+    req.on('close', () => {
+      console.log(`Clearing heartbeat for ${sessionId}`);
+      clearInterval(heartbeat);
+    });
 
   } catch (error) {
     console.error('Token verification error:', error);
-    return res.status(401).end();
+    return res.status(401).send('Unauthorized');
   }
 });
 
@@ -274,37 +276,38 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
       return res.status(400).json({ error: 'Human image must be provided.' });
     }
 
-    sendProgress(sessionId, `Processing ${humanImage.originalname}...`, 'info');
+    sendProgress(sessionId, `Processing image: ${humanImage.originalname} (Step 1/5)`, 'info');
 
     try {
       // Resize image before uploading
       const resizedBuffer = await resizeImage(humanImage.buffer);
-      sendProgress(sessionId, 'Image resized successfully', 'success');
+      sendProgress(sessionId, 'Image resized and optimized (Step 1/5 complete)', 'success');
 
       // Upload to Cloudinary
-      sendProgress(sessionId, 'Uploading to Cloudinary...', 'info');
+      sendProgress(sessionId, 'Uploading to cloud storage... (Step 2/5)', 'info');
       const humanUploadResult = await uploadToCloudinary(resizedBuffer, 'artalyze/humanImages');
-      sendProgress(sessionId, 'Upload to Cloudinary complete', 'success');
+      sendProgress(sessionId, 'Upload to cloud storage complete (Step 2/5 complete)', 'success');
 
       // Generate image description
-      sendProgress(sessionId, 'Analyzing image...', 'info');
+      sendProgress(sessionId, 'Analyzing image style and composition... (Step 3/5)', 'info');
       const imageAnalysis = await generateImageDescription(humanUploadResult.secure_url);
-      sendProgress(sessionId, 'Image analysis complete', 'success');
+      sendProgress(sessionId, 'Image analysis complete (Step 3/5 complete)', 'success');
 
       // Generate remixed prompt
-      sendProgress(sessionId, 'Generating AI prompt...', 'info');
+      sendProgress(sessionId, 'Engineering AI prompt based on analysis... (Step 4/5)', 'info');
       const { prompt: remixedPrompt, metadata } = await remixCaption(imageAnalysis);
-      sendProgress(sessionId, 'AI prompt generated', 'success');
+      sendProgress(sessionId, 'AI prompt engineering complete (Step 4/5 complete)', 'success');
 
       try {
         // Generate AI image
-        sendProgress(sessionId, 'Starting AI image generation...', 'info');
+        sendProgress(sessionId, 'Starting AI image generation... (Step 5/5)', 'info');
+        sendProgress(sessionId, 'This step typically takes 30-45 seconds...', 'info');
         const aiImageUrl = await generateAIImage(remixedPrompt, (message) => {
-          sendProgress(sessionId, message, 'info');
+          sendProgress(sessionId, `${message} (Step 5/5 in progress)`, 'info');
         });
 
         if (!aiImageUrl) {
-          sendProgress(sessionId, 'AI generation limit reached. Please try again later.', 'error');
+          sendProgress(sessionId, 'AI generation limit reached. Please try again in a few minutes.', 'error');
           return res.status(429).json({ 
             error: 'AI image generation skipped due to API limits',
             humanImageURL: humanUploadResult.secure_url,
@@ -312,12 +315,12 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
           });
         }
 
-        sendProgress(sessionId, 'AI image generated successfully', 'success');
+        sendProgress(sessionId, 'AI image generated successfully (Step 5/5 complete)', 'success');
 
         // Save to database
-        sendProgress(sessionId, 'Finding next available date...', 'info');
+        sendProgress(sessionId, 'Finding optimal scheduling date...', 'info');
         const targetDate = await findNextAvailableDate();
-        sendProgress(sessionId, `Scheduling for ${targetDate.toLocaleDateString()}`, 'info');
+        sendProgress(sessionId, `Scheduling for ${targetDate.toLocaleDateString()}`, 'success');
 
         const imagePairDoc = await saveImagePair(
           targetDate,
@@ -332,7 +335,7 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
         );
 
         uploadSuccess = true;
-        sendProgress(sessionId, 'Image pair saved successfully!', 'success');
+        sendProgress(sessionId, '✨ Image pair created and scheduled successfully! ✨', 'success');
         
         res.json({ 
           message: 'Upload complete',
@@ -365,11 +368,12 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
     if (uploadSuccess && global.progressStreams?.has(sessionId)) {
       setTimeout(() => {
         if (global.progressStreams?.has(sessionId)) {
+          sendProgress(sessionId, 'Closing connection...', 'info');
           const stream = global.progressStreams.get(sessionId);
           stream.end();
           global.progressStreams.delete(sessionId);
         }
-      }, 1000); // Give frontend time to process success message
+      }, 2000); // Give frontend time to process success message
     }
   }
 });
