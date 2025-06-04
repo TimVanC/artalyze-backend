@@ -37,7 +37,8 @@ const ImagePairCollection = mongoose.model(collectionName, ImagePair.schema);
 
 // Ensure authentication and admin access for all routes except login
 router.use((req, res, next) => {
-  if (req.path === '/login') {
+  // Check if the path ends with /login instead of exact match
+  if (req.path.endsWith('/login')) {
     return next();
   }
   authenticateToken(req, res, () => {
