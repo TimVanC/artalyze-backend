@@ -124,24 +124,18 @@ const generateAIImage = async ({ prompt, metadata }, progressCallback = null) =>
         progressCallback('Image validated, uploading to Cloudinary...');
       }
 
-      // Apply medium-specific processing with preserved aspect ratio
-      const uploadOptions = {
-        ...getCloudinaryOptions(metadata.medium),
-        aspect_ratio: metadata.dimensions?.aspectRatio || 1,
-        transformation: [
-          { width: "auto", crop: "scale" }, // Ensure width scales proportionally
-          { fetch_format: "auto", quality: "auto" } // Optimize delivery format and quality
-        ]
-      };
+      // Download the image
+      const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+      const imageBuffer = Buffer.from(imageResponse.data);
 
-      // Upload processed image to Cloudinary
-      const uploadResponse = await cloudinary.uploader.upload(imageUrl, uploadOptions);
+      // Upload to Cloudinary using the updated options
+      const uploadResult = await uploadToCloudinary(imageBuffer, metadata);
 
       if (progressCallback) {
         progressCallback('Process completed successfully');
       }
 
-      return uploadResponse.secure_url;
+      return uploadResult.secure_url;
 
     } catch (error) {
       lastError = error;
@@ -182,34 +176,32 @@ const getCloudinaryOptions = (medium) => {
     quality: 'auto:best',
     flags: 'preserve_transparency',
     fetch_format: 'auto',
-    crop: 'scale', // Changed from 'fill' to 'scale' to preserve aspect ratio
+    transformation: [
+      { width: 650, crop: "scale" }
+    ]
   };
 
-  switch (medium?.toLowerCase()) {
-    case 'pencil sketch':
-    case 'charcoal':
-      return {
-        ...baseOptions,
-        effect: 'art:zorro',
-      };
-    case 'watercolor':
-      return {
-        ...baseOptions,
-        effect: 'art:athena',
-      };
-    case 'oil painting':
-      return {
-        ...baseOptions,
-        effect: 'oil_paint:100',
-      };
-    case 'photograph':
-      return {
-        ...baseOptions,
-        effect: 'improve',
-      };
-    default:
-      return baseOptions;
+  const effect = (() => {
+    switch (medium?.toLowerCase()) {
+      case 'pencil sketch':
+      case 'charcoal':
+        return 'art:zorro';
+      case 'watercolor':
+        return 'art:athena';
+      case 'oil painting':
+        return 'oil_paint:100';
+      case 'photograph':
+        return 'improve';
+      default:
+        return null;
+    }
+  })();
+
+  if (effect) {
+    baseOptions.transformation.push({ effect });
   }
+
+  return baseOptions;
 };
 
 const uploadToCloudinary = async (imageBuffer, metadata) => {
