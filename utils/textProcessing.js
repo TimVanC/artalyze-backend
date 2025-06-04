@@ -19,7 +19,7 @@ const remixCaption = async ({ description, styleAnalysis, metadata }) => {
   try {
     // First, get style-specific imperfections
     const imperfectionsResponse = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4",
       messages: [
         {
           role: "system",
@@ -45,7 +45,7 @@ Focus on 2-3 key imperfections that would be natural for this medium and style.`
 
     // Now, generate the final prompt
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4",
       messages: [
         {
           role: "system",
@@ -82,7 +82,7 @@ Create a remixed version that:
 6. Uses varied, natural language
 7. Maintains the ${metadata.dimensions.orientation} orientation with ${metadata.dimensions.aspectRatio.toFixed(2)} aspect ratio
 
-Format the response as a JSON object:
+Format the response as a JSON object with these exact keys:
 {
   "criticalInterpretation": "How the piece should be interpreted",
   "mainPrompt": "The main DALL-E prompt",
@@ -95,7 +95,22 @@ Format the response as a JSON object:
       temperature: 0.8
     });
 
-    const promptData = JSON.parse(response.choices[0].message.content.trim());
+    let promptData;
+    try {
+      promptData = JSON.parse(response.choices[0].message.content.trim());
+    } catch (parseError) {
+      console.error('Error parsing GPT response:', parseError);
+      console.log('Raw response:', response.choices[0].message.content.trim());
+      // Fallback to using the raw response as the prompt
+      return {
+        prompt: response.choices[0].message.content.trim(),
+        metadata: {
+          ...metadata,
+          criticalInterpretation: "Error parsing response",
+          suggestedImperfections
+        }
+      };
+    }
     
     // Combine all elements into the final prompt
     const finalPrompt = `${promptData.criticalInterpretation}
@@ -111,7 +126,7 @@ Dimensions: ${promptData.dimensions}`;
       metadata: {
         ...metadata,
         criticalInterpretation: promptData.criticalInterpretation,
-        suggestedImperfections: suggestedImperfections
+        suggestedImperfections
       }
     };
   } catch (error) {

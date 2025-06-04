@@ -288,21 +288,18 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
 
       // Generate image description
       sendProgress(sessionId, 'Analyzing image...', 'info');
-      const description = await generateImageDescription(humanUploadResult.secure_url);
+      const imageAnalysis = await generateImageDescription(humanUploadResult.secure_url);
       sendProgress(sessionId, 'Image analysis complete', 'success');
 
       // Generate remixed prompt
       sendProgress(sessionId, 'Generating AI prompt...', 'info');
-      const remixedPrompt = await remixCaption(description);
+      const { prompt: remixedPrompt, metadata } = await remixCaption(imageAnalysis);
       sendProgress(sessionId, 'AI prompt generated', 'success');
 
       try {
         // Generate AI image
         sendProgress(sessionId, 'Starting AI image generation...', 'info');
-        const aiImageUrl = await generateAIImage({
-          prompt: remixedPrompt,
-          metadata: description.metadata
-        }, (message) => {
+        const aiImageUrl = await generateAIImage(remixedPrompt, (message) => {
           sendProgress(sessionId, message, 'info');
         });
 
@@ -311,7 +308,7 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
           return res.status(429).json({ 
             error: 'AI image generation skipped due to API limits',
             humanImageURL: humanUploadResult.secure_url,
-            description
+            description: imageAnalysis.description
           });
         }
 
@@ -326,7 +323,12 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
           targetDate,
           humanUploadResult.secure_url,
           aiImageUrl,
-          { description, remixedPrompt }
+          { 
+            description: imageAnalysis.description,
+            styleAnalysis: imageAnalysis.styleAnalysis,
+            metadata: imageAnalysis.metadata,
+            remixedPrompt 
+          }
         );
 
         uploadSuccess = true;

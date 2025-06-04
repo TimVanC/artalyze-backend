@@ -77,13 +77,11 @@ const calculateDallESize = (dimensions) => {
 
 /**
  * Generates an AI image using enhanced style-aware prompts
- * @param {Object} params - Generation parameters
- * @param {string} params.prompt - The enhanced prompt
- * @param {Object} params.metadata - Style metadata
+ * @param {string} prompt - The enhanced prompt
  * @param {Function} [progressCallback] - Optional callback for progress updates
  * @returns {Promise<string>} - The generated image URL
  */
-const generateAIImage = async ({ prompt, metadata }, progressCallback = null) => {
+const generateAIImage = async (prompt, progressCallback = null) => {
   let lastError = null;
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -92,20 +90,15 @@ const generateAIImage = async ({ prompt, metadata }, progressCallback = null) =>
         progressCallback(`Attempt ${attempt}: Generating AI image with DALL-E 3...`);
       }
 
-      // Adjust quality and style based on metadata
-      const quality = metadata.medium === 'photograph' ? 'hd' : 'standard';
-      const style = metadata.style?.toLowerCase().includes('realistic') ? 'vivid' : 'natural';
-      const size = calculateDallESize(metadata.dimensions);
-
       // Generate image with DALL-E 3
       const response = await openai.images.generate({
         model: "dall-e-3",
         prompt: prompt,
         n: 1,
         response_format: "url",
-        quality,
-        style,
-        size
+        quality: "standard",
+        style: "natural",
+        size: "1024x1024"
       });
 
       const imageUrl = response.data[0].url;
@@ -129,7 +122,7 @@ const generateAIImage = async ({ prompt, metadata }, progressCallback = null) =>
       const imageBuffer = Buffer.from(imageResponse.data);
 
       // Upload to Cloudinary using the updated options
-      const uploadResult = await uploadToCloudinary(imageBuffer, metadata);
+      const uploadResult = await uploadToCloudinary(imageBuffer);
 
       if (progressCallback) {
         progressCallback('Process completed successfully');
