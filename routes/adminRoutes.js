@@ -198,31 +198,8 @@ const sendProgress = (sessionId, message, type = 'info') => {
 };
 
 // Progress updates endpoint
-router.get('/progress-updates/:sessionId', (req, res) => {
+router.get('/progress-updates/:sessionId', authenticateToken, authorizeAdmin, (req, res) => {
   const sessionId = req.params.sessionId;
-  
-  // Get token from query string or Authorization header
-  const token = req.query.token || req.headers.authorization?.split(" ")[1];
-  
-  if (!token) {
-    console.error('No token provided');
-    res.status(401).end();
-    return;
-  }
-
-  // Verify token
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded || decoded.role !== 'admin') {
-      console.error('Invalid token or not admin:', decoded);
-      res.status(403).end();
-      return;
-    }
-  } catch (error) {
-    console.error('Token verification error:', error);
-    res.status(401).end();
-    return;
-  }
   
   // Set headers for SSE
   res.writeHead(200, {
