@@ -202,15 +202,12 @@ router.get('/progress-updates/:sessionId', (req, res) => {
   const sessionId = req.params.sessionId;
   
   // Get auth token from query parameter
-  const authHeader = req.query.auth;
-  if (!authHeader) {
-    console.error('No auth token provided in query params');
+  const token = req.query.token;
+  if (!token) {
+    console.error('No auth token provided');
     return res.status(401).send('No auth token provided');
   }
 
-  // Extract token without Bearer prefix if it exists
-  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
-  
   // Verify token
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
