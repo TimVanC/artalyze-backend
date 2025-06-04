@@ -12,11 +12,6 @@ const connectDB = require('./config/db'); // Database connection configuration
 
 const app = express();
 
-// Verify server status
-app.get("/", (req, res) => {
-    res.json({ message: "Backend is running successfully!" });
-});
-
 // Log all incoming requests for debugging and monitoring
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} request to ${req.originalUrl} from ${req.headers.origin}`);
@@ -24,7 +19,6 @@ app.use((req, res, next) => {
 });
 
 // CORS configuration
-// Define otherOrigins before using it
 const otherOrigins = process.env.OTHER_ORIGINS ? process.env.OTHER_ORIGINS.split(",") : [];
 
 app.use(cors({
@@ -34,7 +28,7 @@ app.use(cors({
             'https://staging.artalyze.app',
             'https://artalyze-backend-staging.up.railway.app'
           ]
-        : [...otherOrigins], // ✅ Now `otherOrigins` is properly defined
+        : [...otherOrigins],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
@@ -57,8 +51,10 @@ app.use(express.urlencoded({ extended: true }));
     }
 })();
 
-// Serve static files from the uploads directory
-app.use('/uploads', express.static('uploads'));
+// Verify server status
+app.get("/", (req, res) => {
+    res.json({ message: "Backend is running successfully!" });
+});
 
 // Mount all API routes
 app.use('/api/auth', authRoutes);
@@ -68,15 +64,17 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/user', userRoutes);
 
+// Serve static files from the uploads directory
+app.use('/uploads', express.static('uploads'));
+
 // Global error handler for uncaught exceptions
 app.use((err, req, res, next) => {
     console.error('An error occurred:', err.stack);
-    res.status(500).send({ message: 'An error occurred. Please try again later.' });
+    res.status(500).json({ message: 'An error occurred. Please try again later.' });
 });
 
 // Production environment configuration
 if (process.env.NODE_ENV === 'production') {
-    app.use('/api/admin', adminRoutes);
     app.use(express.static(path.join(__dirname, '../artalyze-user/build')));
     app.get('*', (req, res) => {
         if (req.path.startsWith('/api/')) {
@@ -99,6 +97,11 @@ process.on('SIGTERM', () => {
     server.close(() => {
         console.log('HTTP server closed.');
     });
+});
+
+// Handle 404 errors for API routes
+app.use('/api/*', (req, res) => {
+    res.status(404).json({ error: 'API endpoint not found' });
 });
 
 // Serve static files from the public directory

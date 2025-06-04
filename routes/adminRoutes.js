@@ -485,4 +485,97 @@ router.get('/get-image-pairs-by-date/:date', async (req, res) => {
   }
 });
 
+// Regenerate AI image for a pair
+router.post('/regenerate-ai-image', async (req, res) => {
+  console.log('Regenerate AI endpoint called with:', {
+    body: req.body,
+    headers: req.headers
+  });
+  try {
+    const { pairId, scheduledDate } = req.body;
+    if (!pairId || !scheduledDate) {
+      return res.status(400).json({ error: 'Pair ID and scheduled date are required.' });
+    }
+
+    // Find the document for the given date
+    const doc = await ImagePairCollection.findOne({ scheduledDate: new Date(scheduledDate) });
+    console.log('Found document:', doc);
+    if (!doc) {
+      return res.status(404).json({ error: 'Image pair not found.' });
+    }
+
+    // Find the specific pair
+    const pair = doc.pairs.id(pairId);
+    console.log('Found pair:', pair);
+    if (!pair) {
+      return res.status(404).json({ error: 'Pair not found.' });
+    }
+
+    // Generate new image description and AI image
+    const imageAnalysis = await generateImageDescription(pair.humanImageURL);
+    const { prompt: remixedPrompt } = await remixCaption(imageAnalysis);
+    
+    const newAiImageUrl = await generateAIImage(remixedPrompt);
+    if (!newAiImageUrl) {
+      return res.status(429).json({ error: 'AI image generation failed. Please try again later.' });
+    }
+
+    // Update the pair with new AI image
+    pair.aiImageURL = newAiImageUrl;
+    pair.metadata = {
+      ...pair.metadata,
+      description: imageAnalysis.description,
+      styleAnalysis: imageAnalysis.styleAnalysis,
+      remixedPrompt,
+      regeneratedAt: new Date()
+    };
+
+    await doc.save();
+
+    res.json({ 
+      message: 'AI image regenerated successfully',
+      newAiImageUrl,
+      pairId
+    });
+
+  } catch (error) {
+    console.error('Regeneration Error:', error);
+    res.status(500).json({ error: 'Failed to regenerate AI image' });
+  }
+});
+
+// Delete an image pair
+router.delete('/delete-pair', async (req, res) => {
+  console.log('Delete pair endpoint called with:', {
+    body: req.body,
+    headers: req.headers
+  });
+  try {
+    const { pairId, scheduledDate } = req.body;
+    if (!pairId || !scheduledDate) {
+      return res.status(400).json({ error: 'Pair ID and scheduled date are required.' });
+    }
+
+    const result = await ImagePairCollection.findOneAndUpdate(
+      { scheduledDate: new Date(scheduledDate) },
+      { $pull: { pairs: { _id: pairId } } },
+      { new: true }
+    );
+    console.log('Delete operation result:', result);
+
+    if (!result) {
+      return res.status(404).json({ error: 'Image pair not found.' });
+    }
+
+    res.json({ 
+      message: 'Image pair deleted successfully',
+      remainingPairs: result.pairs
+    });
+
+  } catch (error) {
+    console.error('Deletion Error:', error);
+    res.status(500).json({ error: 'Failed to delete image pair' });
+  }
+});
+
 module.exports = router;
