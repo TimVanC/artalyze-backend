@@ -2,6 +2,7 @@ const OpenAI = require('openai');
 const cloudinary = require('cloudinary').v2;
 const sharp = require('sharp');
 const axios = require('axios');
+const streamifier = require('streamifier');
 
 // Initialize OpenAI with API key
 const openai = new OpenAI({
@@ -209,6 +210,29 @@ const getCloudinaryOptions = (medium) => {
     default:
       return baseOptions;
   }
+};
+
+const uploadToCloudinary = async (imageBuffer, metadata) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'artalyze/aiImages',
+        format: 'webp',
+        quality: 'auto:best',
+        flags: 'preserve_transparency',
+        fetch_format: 'auto',
+        transformation: [
+          { width: 650, crop: "scale" }
+        ]
+      },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      }
+    );
+
+    streamifier.createReadStream(imageBuffer).pipe(uploadStream);
+  });
 };
 
 module.exports = {

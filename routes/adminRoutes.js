@@ -84,7 +84,10 @@ const uploadToCloudinary = (fileBuffer, folderName) => {
         folder: folderName,
         format: "webp",
         quality: "auto:best",
-        resource_type: "image"
+        resource_type: "image",
+        transformation: [
+          { width: 650, crop: "scale" }
+        ]
       },
       (error, result) => {
         if (error) {
