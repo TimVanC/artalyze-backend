@@ -6,22 +6,33 @@ const { getTodayInEST, getYesterdayInEST } = require('../utils/dateUtils');
 // Get today's puzzle pairs
 exports.getDailyPuzzle = async (req, res) => {
   try {
-    // Get current date in UTC and set to midnight
-    const today = new Date();
-    today.setUTCHours(5, 0, 0, 0); // 5 AM UTC = midnight EST
+    // Get current date in UTC and set to start/end of day EST
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(5, 0, 0, 0); // 5 AM UTC = midnight EST
 
-    // Find today's pairs
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setUTCHours(28, 59, 59, 999); // Next day 4:59:59 AM UTC = 11:59:59 PM EST
+
+    console.log('Searching for pairs between:', startOfDay, 'and', endOfDay);
+
+    // Find today's pairs using date range
     const todaysPairs = await ImagePair.findOne({
-      scheduledDate: today,
+      scheduledDate: { 
+        $gte: startOfDay,
+        $lte: endOfDay
+      },
       'pairs.0': { $exists: true } // Ensure there are completed pairs
     });
 
     if (!todaysPairs || !todaysPairs.pairs.length) {
+      console.log('No pairs found for today');
       return res.status(404).json({ 
         error: 'No puzzles available for today',
         message: 'Please check back later!'
       });
     }
+
+    console.log('Found pairs:', todaysPairs.pairs.length);
 
     // Return only the image URLs, not the entire document
     const puzzles = todaysPairs.pairs.map(pair => ({
@@ -29,7 +40,7 @@ exports.getDailyPuzzle = async (req, res) => {
       aiImageURL: pair.aiImageURL
     }));
 
-    res.json({ puzzles });
+    res.json({ imagePairs: puzzles });
   } catch (error) {
     console.error('Error fetching daily puzzle:', error);
     res.status(500).json({ error: 'Failed to fetch daily puzzle' });
