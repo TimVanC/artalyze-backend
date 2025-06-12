@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { getOldestUnusedImages } = require('./utils/cloudinaryUtils');
 const { captionImage } = require('./utils/captionUtils');
-const { generateAiPrompt } = require('./utils/promptUtils');
+const { generateAiPrompt } = require('../utils/promptUtils');
 const { generateAiImage } = require('./utils/imageGenUtils');
 const { processAndUploadImages } = require('./utils/uploadUtils');
 const { updateMongoDB } = require('./utils/dbUtils');
