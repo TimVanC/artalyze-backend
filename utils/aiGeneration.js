@@ -76,8 +76,8 @@ const calculateDallESize = (dimensions) => {
 };
 
 /**
- * Generates an AI image using enhanced style-aware prompts
- * @param {string} prompt - The enhanced prompt
+ * Generates an AI image using DALL·E 3
+ * @param {string} prompt - The prompt for image generation
  * @param {Function} [progressCallback] - Optional callback for progress updates
  * @returns {Promise<string>} - The generated image URL
  */
@@ -87,18 +87,17 @@ const generateAIImage = async (prompt, progressCallback = null) => {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       if (progressCallback) {
-        progressCallback(`Attempt ${attempt}: Generating AI image with DALL-E 3...`);
+        progressCallback(`Attempt ${attempt}: Generating AI image with DALL·E 3...`);
       }
 
-      // Generate image with DALL-E 3
+      // Generate image with DALL·E 3
       const response = await openai.images.generate({
         model: "dall-e-3",
         prompt: prompt,
         n: 1,
-        response_format: "url",
+        size: "1024x1024",
         quality: "standard",
-        style: "natural",
-        size: "1024x1024"
+        style: "natural"
       });
 
       const imageUrl = response.data[0].url;
@@ -114,15 +113,28 @@ const generateAIImage = async (prompt, progressCallback = null) => {
       }
 
       if (progressCallback) {
-        progressCallback('Image validated, uploading to Cloudinary...');
+        progressCallback('Image validated, downloading and processing...');
       }
 
       // Download the image
       const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
       const imageBuffer = Buffer.from(imageResponse.data);
 
-      // Upload to Cloudinary using the updated options
-      const uploadResult = await uploadToCloudinary(imageBuffer);
+      // Process with sharp to resize and convert to webp
+      const processedBuffer = await sharp(imageBuffer)
+        .resize(600, null, { // Resize to 600px width, maintain aspect ratio
+          withoutEnlargement: true,
+          fit: 'inside'
+        })
+        .webp({ quality: 90 })
+        .toBuffer();
+
+      if (progressCallback) {
+        progressCallback('Image processed, uploading to Cloudinary...');
+      }
+
+      // Upload to Cloudinary
+      const uploadResult = await uploadToCloudinary(processedBuffer);
 
       if (progressCallback) {
         progressCallback('Process completed successfully');
@@ -207,7 +219,7 @@ const uploadToCloudinary = async (imageBuffer, metadata) => {
         flags: 'preserve_transparency',
         fetch_format: 'auto',
         transformation: [
-          { width: 650, crop: "scale" }
+          { width: 600, crop: "scale" }
         ]
       },
       (error, result) => {
