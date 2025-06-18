@@ -13,6 +13,7 @@ const OpenAI = require('openai');
 const { generateAIImage } = require('../utils/aiGeneration');
 const jwt = require('jsonwebtoken');
 const { generateImageDescription, remixCaption } = require('../utils/textProcessing');
+const axios = require('axios');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -298,6 +299,15 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
     sendProgress(sessionId, `Processing image ${currentImageIndex}/${totalImages}: Optimizing image...`, 'info');
 
     try {
+      // Get image dimensions before resizing
+      const metadata = await sharp(humanImage.buffer).metadata();
+      const dimensions = {
+        width: metadata.width,
+        height: metadata.height,
+        aspectRatio: metadata.width / metadata.height,
+        orientation: metadata.width > metadata.height ? 'landscape' : metadata.width < metadata.height ? 'portrait' : 'square'
+      };
+
       // Resize image before uploading
       const resizedBuffer = await resizeImage(humanImage.buffer);
       sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: Optimization complete`, 'success');
@@ -314,7 +324,13 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
 
       // Generate remixed prompt
       sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: Engineering AI prompt...`, 'info');
-      const { prompt: remixedPrompt, metadata } = await remixCaption(imageAnalysis);
+      const { prompt: remixedPrompt } = await remixCaption({
+        ...imageAnalysis,
+        metadata: {
+          ...imageAnalysis.metadata,
+          dimensions
+        }
+      });
       sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: AI prompt ready`, 'success');
 
       try {
@@ -322,7 +338,7 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
         sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: Starting AI generation (typically 30-45 seconds)...`, 'info');
         const aiImageUrl = await generateAIImage(remixedPrompt, (message) => {
           sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: ${message}`, 'info');
-        });
+        }, dimensions);
 
         if (!aiImageUrl) {
           sendProgress(sessionId, 'AI generation limit reached. Please try again in a few minutes.', 'error');
@@ -347,7 +363,10 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
           { 
             description: imageAnalysis.description,
             styleAnalysis: imageAnalysis.styleAnalysis,
-            metadata: imageAnalysis.metadata,
+            metadata: {
+              ...imageAnalysis.metadata,
+              dimensions
+            },
             remixedPrompt 
           }
         );
@@ -514,11 +533,28 @@ router.post('/regenerate-ai-image', async (req, res) => {
       return res.status(404).json({ error: 'Pair not found in the document.' });
     }
 
+    // Get dimensions from the human image
+    const humanImageResponse = await axios.get(pair.humanImageURL, { responseType: 'arraybuffer' });
+    const humanImageBuffer = Buffer.from(humanImageResponse.data);
+    const metadata = await sharp(humanImageBuffer).metadata();
+    const dimensions = {
+      width: metadata.width,
+      height: metadata.height,
+      aspectRatio: metadata.width / metadata.height,
+      orientation: metadata.width > metadata.height ? 'landscape' : metadata.width < metadata.height ? 'portrait' : 'square'
+    };
+
     // Generate new image description and AI image
     const imageAnalysis = await generateImageDescription(pair.humanImageURL);
-    const { prompt: remixedPrompt } = await remixCaption(imageAnalysis);
+    const { prompt: remixedPrompt } = await remixCaption({
+      ...imageAnalysis,
+      metadata: {
+        ...imageAnalysis.metadata,
+        dimensions
+      }
+    });
     
-    const newAiImageUrl = await generateAIImage(remixedPrompt);
+    const newAiImageUrl = await generateAIImage(remixedPrompt, null, dimensions);
     if (!newAiImageUrl) {
       return res.status(429).json({ error: 'AI image generation failed. Please try again later.' });
     }
@@ -536,6 +572,7 @@ router.post('/regenerate-ai-image', async (req, res) => {
             description: imageAnalysis.description,
             styleAnalysis: imageAnalysis.styleAnalysis,
             remixedPrompt,
+            dimensions,
             regeneratedAt: new Date()
           }
         }

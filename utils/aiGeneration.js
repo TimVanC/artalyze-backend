@@ -79,9 +79,10 @@ const calculateDallESize = (dimensions) => {
  * Generates an AI image using DALL·E 3
  * @param {string} prompt - The prompt for image generation
  * @param {Function} [progressCallback] - Optional callback for progress updates
+ * @param {Object} [dimensions] - Optional dimensions for the output image
  * @returns {Promise<string>} - The generated image URL
  */
-const generateAIImage = async (prompt, progressCallback = null) => {
+const generateAIImage = async (prompt, progressCallback = null, dimensions = null) => {
   let lastError = null;
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -90,12 +91,15 @@ const generateAIImage = async (prompt, progressCallback = null) => {
         progressCallback(`Attempt ${attempt}: Generating AI image with DALL·E 3...`);
       }
 
+      // Calculate optimal size based on dimensions
+      const size = calculateDallESize(dimensions);
+
       // Generate image with DALL·E 3
       const response = await openai.images.generate({
         model: "dall-e-3",
         prompt: prompt,
         n: 1,
-        size: "1024x1024",
+        size: size,
         quality: "standard",
         style: "natural"
       });
