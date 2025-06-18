@@ -17,6 +17,15 @@ const openai = new OpenAI({
  */
 const remixCaption = async ({ description, styleAnalysis, metadata }) => {
   try {
+    // Ensure metadata has required fields with defaults
+    const safeMetadata = {
+      medium: metadata?.medium || 'digital art',
+      style: metadata?.style || 'contemporary',
+      techniques: metadata?.techniques || ['digital'],
+      dimensions: metadata?.dimensions || { width: 1024, height: 1024, orientation: 'square', aspectRatio: 1 },
+      artists: metadata?.artists || []
+    };
+
     // First, get style-specific imperfections
     const imperfectionsResponse = await openai.chat.completions.create({
       model: "gpt-4",
@@ -28,10 +37,10 @@ const remixCaption = async ({ description, styleAnalysis, metadata }) => {
         {
           role: "user",
           content: `Given this artwork's style:
-Medium: ${metadata.medium}
-Style: ${metadata.style}
-Techniques: ${metadata.techniques.join(', ')}
-Dimensions: ${metadata.dimensions.width}x${metadata.dimensions.height} (${metadata.dimensions.orientation})
+Medium: ${safeMetadata.medium}
+Style: ${safeMetadata.style}
+Techniques: ${safeMetadata.techniques.join(', ')}
+Dimensions: ${safeMetadata.dimensions.width}x${safeMetadata.dimensions.height} (${safeMetadata.dimensions.orientation})
 
 What specific imperfections or human elements would make a similar piece feel authentically hand-made? 
 Focus on 2-3 key imperfections that would be natural for this medium and style.`
@@ -67,10 +76,10 @@ Key rules:
           content: `Original artwork information:
 Description: ${description}
 Style Analysis: ${styleAnalysis}
-Medium: ${metadata.medium}
-Style: ${metadata.style}
-Artists: ${metadata.artists.join(', ')}
-Dimensions: ${metadata.dimensions.width}x${metadata.dimensions.height} (${metadata.dimensions.orientation}, aspect ratio ${metadata.dimensions.aspectRatio.toFixed(2)})
+Medium: ${safeMetadata.medium}
+Style: ${safeMetadata.style}
+Artists: ${safeMetadata.artists.join(', ') || 'contemporary'}
+Dimensions: ${safeMetadata.dimensions.width}x${safeMetadata.dimensions.height} (${safeMetadata.dimensions.orientation}, aspect ratio ${safeMetadata.dimensions.aspectRatio.toFixed(2)})
 Suggested Imperfections: ${suggestedImperfections}
 
 Create a remixed version that:
@@ -80,14 +89,14 @@ Create a remixed version that:
 4. Changes the subject to something contextually appropriate
 5. Incorporates the suggested imperfections naturally
 6. Uses varied, natural language
-7. Maintains the ${metadata.dimensions.orientation} orientation with ${metadata.dimensions.aspectRatio.toFixed(2)} aspect ratio
+7. Maintains the ${safeMetadata.dimensions.orientation} orientation with ${safeMetadata.dimensions.aspectRatio.toFixed(2)} aspect ratio
 
 Format the response as a JSON object with these exact keys:
 {
   "criticalInterpretation": "How the piece should be interpreted",
   "mainPrompt": "The main DALL-E prompt",
   "imperfectionsNote": "Specific imperfections to include",
-  "dimensions": "${metadata.dimensions.width}x${metadata.dimensions.height}"
+  "dimensions": "${safeMetadata.dimensions.width}x${safeMetadata.dimensions.height}"
 }`
         }
       ],
@@ -105,7 +114,7 @@ Format the response as a JSON object with these exact keys:
       return {
         prompt: response.choices[0].message.content.trim(),
         metadata: {
-          ...metadata,
+          ...safeMetadata,
           criticalInterpretation: "Error parsing response",
           suggestedImperfections
         }
@@ -124,7 +133,7 @@ Dimensions: ${promptData.dimensions}`;
     return {
       prompt: finalPrompt,
       metadata: {
-        ...metadata,
+        ...safeMetadata,
         criticalInterpretation: promptData.criticalInterpretation,
         suggestedImperfections
       }
@@ -133,7 +142,13 @@ Dimensions: ${promptData.dimensions}`;
     console.error('Error remixing caption:', error);
     return {
       prompt: description,
-      metadata: metadata
+      metadata: metadata || {
+        medium: 'digital art',
+        style: 'contemporary',
+        techniques: ['digital'],
+        dimensions: { width: 1024, height: 1024, orientation: 'square', aspectRatio: 1 },
+        artists: []
+      }
     };
   }
 };
