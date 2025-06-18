@@ -66,12 +66,25 @@ const calculateDallESize = (dimensions) => {
   // DALL-E 3 supported sizes: 1024x1024, 1024x1792, 1792x1024
   const aspectRatio = dimensions.aspectRatio || 1;
   
-  if (aspectRatio > 1.6) { // Landscape
-    return '1792x1024';
-  } else if (aspectRatio < 0.6) { // Portrait
-    return '1024x1792';
-  } else { // Near square
-    return '1024x1024';
+  // Calculate the aspect ratios of DALL-E's available sizes
+  const squareRatio = 1024 / 1024; // 1:1
+  const portraitRatio = 1024 / 1792; // ~0.57 (9:16)
+  const landscapeRatio = 1792 / 1024; // ~1.75 (16:9)
+  
+  // Calculate the difference between the input aspect ratio and each DALL-E option
+  const squareDiff = Math.abs(aspectRatio - squareRatio);
+  const portraitDiff = Math.abs(aspectRatio - portraitRatio);
+  const landscapeDiff = Math.abs(aspectRatio - landscapeRatio);
+  
+  // Choose the closest match
+  const minDiff = Math.min(squareDiff, portraitDiff, landscapeDiff);
+  
+  if (minDiff === squareDiff) {
+    return '1024x1024'; // Square (~1:1)
+  } else if (minDiff === portraitDiff) {
+    return '1024x1792'; // Portrait (~9:16)
+  } else {
+    return '1792x1024'; // Landscape (~16:9)
   }
 };
 
@@ -93,6 +106,11 @@ const generateAIImage = async (prompt, progressCallback = null, dimensions = nul
 
       // Calculate optimal size based on dimensions
       const size = calculateDallESize(dimensions);
+      
+      // Log the aspect ratio matching for debugging
+      if (dimensions) {
+        console.log(`Aspect ratio matching: ${dimensions.width}x${dimensions.height} (${dimensions.aspectRatio.toFixed(2)}) → ${size}`);
+      }
 
       // Generate image with DALL·E 3
       const response = await openai.images.generate({
