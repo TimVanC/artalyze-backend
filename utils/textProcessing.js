@@ -34,22 +34,24 @@ const remixCaption = async ({ description, styleAnalysis, metadata }) => {
       switch (imageType.toLowerCase()) {
         case 'photograph':
           return `Create a prompt for a REAL PHOTOGRAPH that looks like it was taken with a camera. 
-- If it's architecture: "A photograph of [subject] taken with a camera, showing real architectural details, natural lighting, realistic perspective"
-- If it's nature: "A photograph of [subject] captured in natural light, showing real environmental details, authentic colors"
-- If it's street photography: "A candid photograph of [subject] in urban setting, natural lighting, realistic street scene"
-- If it's portrait: "A photograph of [subject] taken with a camera, natural lighting, realistic skin texture, authentic colors"
-- AVOID: 3D renders, digital art, illustrations, or anything that looks artificial`;
+- If it's architecture: "A photograph of [subject] taken with a camera, showing real architectural details, natural lighting, realistic perspective, authentic colors"
+- If it's nature: "A photograph of [subject] captured in natural light, showing real environmental details, authentic colors, realistic depth of field"
+- If it's street photography: "A candid photograph of [subject] in urban setting, natural lighting, realistic street scene, authentic urban atmosphere"
+- If it's portrait: "A photograph of [subject] taken with a camera, natural lighting, realistic skin texture, authentic colors, real human features"
+- If it's landscape: "A photograph of [subject] landscape, natural lighting, realistic environmental details, authentic colors, real depth"
+- AVOID: 3D renders, digital art, illustrations, or anything that looks artificial or computer-generated`;
 
         case 'painting':
           return `Create a prompt for an ACTUAL PAINTING that looks like it was painted on canvas/paper, NOT a photo of a painting.
-- If it's oil painting: "An oil painting of [subject] on canvas, visible brushstrokes, paint texture, artistic composition"
-- If it's watercolor: "A watercolor painting of [subject] on paper, paint bleeding, paper texture, artistic flow"
-- If it's acrylic: "An acrylic painting of [subject] on canvas, bold colors, paint layers, artistic technique"
-- AVOID: "photograph of a painting", "photo of canvas", or anything that suggests it's a photo of artwork`;
+- If it's oil painting: "An oil painting of [subject] on canvas, visible brushstrokes, paint texture, artistic composition, paint layers, canvas texture"
+- If it's watercolor: "A watercolor painting of [subject] on paper, paint bleeding, paper texture, artistic flow, watercolor technique"
+- If it's acrylic: "An acrylic painting of [subject] on canvas, bold colors, paint layers, artistic technique, canvas texture"
+- If it's gouache: "A gouache painting of [subject] on paper, opaque paint texture, paper surface, artistic technique"
+- AVOID: "photograph of a painting", "photo of canvas", "3D render of painting", or anything that suggests it's a photo of artwork`;
 
         case 'digital_art':
           return `Create a prompt for DIGITAL ART that looks like it was created digitally.
-- "Digital art of [subject], created with digital tools, clean lines, digital composition"
+- "Digital art of [subject], created with digital tools, clean lines, digital composition, digital art style"
 - AVOID: Photographic realism unless specifically requested`;
 
         default:
@@ -91,7 +93,7 @@ Focus on 2-3 key imperfections that would be natural for this type and medium.`
       messages: [
         {
           role: "system",
-          content: `You are an expert art prompt engineer who understands the critical difference between different image types. Your goal is to create prompts that generate the correct type of image.
+          content: `You are an expert art prompt engineer who understands the critical difference between different image types. Your goal is to create prompts that generate images that convincingly pass as human-made in a side-by-side guessing game.
 
 CRITICAL RULES:
 1. For PHOTOGRAPHS: Generate prompts that create REAL PHOTOGRAPHS, not 3D renders or digital art
@@ -100,7 +102,9 @@ CRITICAL RULES:
 4. NEVER mix types - if original is a photo, AI should be a photo; if original is a painting, AI should be a painting
 5. Use specific, technical language that DALL-E 3 understands
 6. Maintain the exact same artistic approach and medium
-7. Change only the subject matter, not the fundamental type of image`
+7. Change only the subject matter, not the fundamental type of image
+8. Include natural imperfections and human elements typical of the medium
+9. Avoid sterile, perfect compositions - favor natural, human-like variations`
         },
         {
           role: "user",
@@ -236,11 +240,16 @@ const generateImageDescription = async (imageUrl) => {
 3. DIGITAL ART: Computer-generated or digital illustrations
 4. MIXED MEDIA: Combinations of the above
 
-For photographs, identify the type (architecture, nature, street, portrait, etc.)
-For paintings, identify the medium (oil, watercolor, acrylic, etc.) and style
+For photographs, identify the type (architecture, nature, street, portrait, landscape, etc.)
+For paintings, identify the medium (oil, watercolor, acrylic, gouache, etc.) and style
 For digital art, identify the style and technique
 
-Be extremely precise in this categorization as it affects how AI images are generated.`
+Be extremely precise in this categorization as it affects how AI images are generated. Pay special attention to:
+- Photographs should look like real photos, not 3D renders
+- Paintings should look like actual paintings, not photos of paintings
+- Digital art should look like digital artwork, not photographs
+
+This classification is critical for generating believable human-like images.`
         },
         {
           role: "user",

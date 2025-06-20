@@ -61,10 +61,10 @@ const validateImage = async (imageUrl) => {
  * @returns {string} - Optimal size parameter for DALL-E
  */
 const calculateDallESize = (dimensions) => {
-  if (!dimensions) return '1024x1024';
+  if (!dimensions || !dimensions.width || !dimensions.height) return '1024x1024';
 
   // DALL-E 3 supported sizes: 1024x1024, 1024x1792, 1792x1024
-  const aspectRatio = dimensions.aspectRatio || 1;
+  const aspectRatio = dimensions.width / dimensions.height;
   
   // Calculate the aspect ratios of DALL-E's available sizes
   const squareRatio = 1024 / 1024; // 1:1
@@ -103,24 +103,24 @@ const enhancePromptForDalle = (prompt, metadata = {}) => {
   // Type-specific enhancements for DALL-E 3
   const typeSpecificEnhancements = {
     'photograph': {
-      'architecture': 'photograph taken with a camera, real architectural details, natural lighting, realistic perspective, authentic colors, no 3D rendering',
-      'nature': 'photograph captured in natural light, real environmental details, authentic colors, realistic depth of field, no digital art',
-      'street': 'candid photograph in urban setting, natural lighting, realistic street scene, authentic urban atmosphere, no illustration',
-      'portrait': 'photograph taken with a camera, natural lighting, realistic skin texture, authentic colors, real human features, no 3D model',
-      'landscape': 'photograph of landscape, natural lighting, realistic environmental details, authentic colors, real depth, no digital rendering',
-      'default': 'photograph taken with a camera, natural lighting, realistic details, authentic colors, no 3D rendering or digital art'
+      'architecture': 'photograph taken with a camera, real architectural details, natural lighting, realistic perspective, authentic colors, slight lens distortion, natural shadows, no 3D rendering',
+      'nature': 'photograph captured in natural light, real environmental details, authentic colors, realistic depth of field, natural grain, slight motion blur, no digital art',
+      'street': 'candid photograph in urban setting, natural lighting, realistic street scene, authentic urban atmosphere, slight camera shake, natural shadows, no illustration',
+      'portrait': 'photograph taken with a camera, natural lighting, realistic skin texture, authentic colors, real human features, slight bokeh, natural shadows, no 3D model',
+      'landscape': 'photograph of landscape, natural lighting, realistic environmental details, authentic colors, real depth, atmospheric perspective, natural grain, no digital rendering',
+      'default': 'photograph taken with a camera, natural lighting, realistic details, authentic colors, slight imperfections, no 3D rendering or digital art'
     },
     'painting': {
-      'oil': 'oil painting on canvas, visible brushstrokes, paint texture, artistic composition, paint layers, canvas texture, not a photo of a painting',
-      'watercolor': 'watercolor painting on paper, paint bleeding, paper texture, artistic flow, watercolor technique, not a photo of artwork',
-      'acrylic': 'acrylic painting on canvas, bold colors, paint layers, artistic technique, canvas texture, not a photo of a painting',
-      'gouache': 'gouache painting on paper, opaque paint texture, paper surface, artistic technique, not a photo of artwork',
-      'default': 'painting on canvas/paper, artistic technique, paint texture, not a photo of artwork'
+      'oil': 'oil painting on canvas, visible brushstrokes, paint texture, artistic composition, paint layers, canvas texture, slight paint drips, natural paint flow, not a photo of a painting',
+      'watercolor': 'watercolor painting on paper, paint bleeding, paper texture, artistic flow, watercolor technique, pigment diffusion, paper buckling, not a photo of artwork',
+      'acrylic': 'acrylic painting on canvas, bold colors, paint layers, artistic technique, canvas texture, paint texture, slight paint buildup, not a photo of a painting',
+      'gouache': 'gouache painting on paper, opaque paint texture, paper surface, artistic technique, paint opacity, paper grain, not a photo of artwork',
+      'default': 'painting on canvas/paper, artistic technique, paint texture, natural paint flow, not a photo of artwork'
     },
     'digital_art': {
-      'illustration': 'digital illustration, clean lines, digital composition, digital art style, not photographic',
-      'concept_art': 'digital concept art, artistic digital style, digital composition, not realistic photography',
-      'default': 'digital art, digital composition, digital style, not photographic realism'
+      'illustration': 'digital illustration, clean lines, digital composition, digital art style, digital brush strokes, not photographic',
+      'concept_art': 'digital concept art, artistic digital style, digital composition, digital rendering, not realistic photography',
+      'default': 'digital art, digital composition, digital style, digital technique, not photographic realism'
     }
   };
 
@@ -130,13 +130,13 @@ const enhancePromptForDalle = (prompt, metadata = {}) => {
 
   // Add medium-specific enhancements
   const mediumEnhancements = {
-    'photograph': 'photographic realism, camera perspective, natural lighting',
-    'painting': 'artistic technique, paint texture, canvas/paper surface',
-    'sketch': 'hand-drawn quality, pencil pressure variations, paper texture',
-    'watercolor': 'water flow patterns, pigment bleeding, natural diffusion',
-    'oil': 'thick paint layers, brush stroke texture, natural paint flow',
-    'charcoal': 'charcoal texture, smudging, paper grain',
-    'pencil': 'graphite texture, pressure variations, eraser marks'
+    'photograph': 'photographic realism, camera perspective, natural lighting, slight imperfections',
+    'painting': 'artistic technique, paint texture, canvas/paper surface, natural paint flow',
+    'sketch': 'hand-drawn quality, pencil pressure variations, paper texture, eraser marks',
+    'watercolor': 'water flow patterns, pigment bleeding, natural diffusion, paper buckling',
+    'oil': 'thick paint layers, brush stroke texture, natural paint flow, paint drips',
+    'charcoal': 'charcoal texture, smudging, paper grain, pressure variations',
+    'pencil': 'graphite texture, pressure variations, eraser marks, paper grain'
   };
 
   const mediumEnhancement = mediumEnhancements[medium.toLowerCase()] || '';
@@ -186,7 +186,7 @@ const generateAIImage = async (prompt, progressCallback = null, dimensions = nul
         prompt: enhancedPrompt,
         n: 1,
         size: size,
-        quality: "hd", // Use HD quality for better results
+        quality: "standard", // Use standard quality to avoid over-polishing
         style: "natural" // Keep natural style for more human-like results
       });
 

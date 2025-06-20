@@ -15,14 +15,14 @@ async function generateAiPrompt(caption) {
       model: "gpt-4-turbo-preview",
       messages: [{
         role: "system",
-        content: `You are a precise art prompt engineer for Stable Diffusion XL. Your task is to create new prompts that maintain strict consistency with the original artwork's style and category while varying the specific subject.
+        content: `This prompt will be used to generate an image that should convincingly pass as human-made in a side-by-side guessing game. It should reflect the subject and artistic style of the original image, including imperfections or natural variations typical of a human-made work.
 
-Key principles:
-1. Style consistency: If the original is photorealistic, abstract, watercolor, etc., maintain that exact style
-2. Category consistency: Keep the same general category (e.g., architecture → building, animal → animal, landscape → landscape)
-3. Subject variation: Change the specific subject while staying within the category
-4. Grounded realism: Only include fantasy/surreal elements if present in the original
-5. Conciseness: Keep prompts under 100 characters`
+Your task is to create prompts that:
+1. Specify an artistic medium (e.g., "film photograph", "oil painting", "watercolor", "charcoal sketch")
+2. Mention texture, lighting, and material details (e.g., "visible brushstrokes," "soft glare," "grainy finish," "washed out tones")
+3. Avoid sterile compositions or perfect symmetry - include framing imperfections, slight asymmetry, or natural object placement
+4. Favor grounded realism - avoid anything overly surreal or fantastical unless the original is clearly abstract or surreal
+5. Target ~15+ words, max 100 characters - specific but compact, avoid repetition or overly generic descriptions`
       }, {
         role: "user",
         content: `You are given a caption describing a piece of visual art:
@@ -35,6 +35,7 @@ Create a new prompt for a different, creatively distinct piece of art that:
 - Changes the specific subject (e.g., not the exact same house or animal)
 - Keeps the tone grounded and believable — no fantasy unless the original is surreal
 - Keeps the result concise (under 100 characters)
+- Includes medium-specific details and natural imperfections
 
 Return ONLY the prompt text with no explanation or additional text.`
       }],
