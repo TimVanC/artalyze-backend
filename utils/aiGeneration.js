@@ -103,12 +103,12 @@ const enhancePromptForDalle = (prompt, metadata = {}) => {
   // Type-specific enhancements for DALL-E 3
   const typeSpecificEnhancements = {
     'photograph': {
-      'architecture': 'photograph taken with a camera, real architectural details, natural lighting, realistic perspective, authentic colors, slight lens distortion, natural shadows, no 3D rendering',
-      'nature': 'photograph captured in natural light, real environmental details, authentic colors, realistic depth of field, natural grain, slight motion blur, no digital art',
-      'street': 'candid photograph in urban setting, natural lighting, realistic street scene, authentic urban atmosphere, slight camera shake, natural shadows, no illustration',
-      'portrait': 'photograph taken with a camera, natural lighting, realistic skin texture, authentic colors, real human features, slight bokeh, natural shadows, no 3D model',
-      'landscape': 'photograph of landscape, natural lighting, realistic environmental details, authentic colors, real depth, atmospheric perspective, natural grain, no digital rendering',
-      'default': 'photograph taken with a camera, natural lighting, realistic details, authentic colors, slight imperfections, no 3D rendering or digital art'
+      'architecture': 'film photograph taken with a camera, real architectural details, natural lighting, realistic perspective, authentic colors, slight lens distortion, natural shadows, minor grain, no 3D rendering or digital art',
+      'nature': 'film photograph captured in natural light, real environmental details, authentic colors, realistic depth of field, natural grain, slight motion blur, realistic shadows, no digital art or 3D rendering',
+      'street': 'candid film photograph in urban setting, natural lighting, realistic street scene, authentic urban atmosphere, slight camera shake, natural shadows, minor grain, no illustration or digital art',
+      'portrait': 'film photograph taken with a camera, natural lighting, realistic skin texture, authentic colors, real human features, slight bokeh, natural shadows, minor grain, no 3D model or digital rendering',
+      'landscape': 'film photograph of landscape, natural lighting, realistic environmental details, authentic colors, real depth, atmospheric perspective, natural grain, slight lens distortion, no digital rendering',
+      'default': 'film photograph taken with a camera, natural lighting, realistic details, authentic colors, slight imperfections, minor grain, no 3D rendering or digital art'
     },
     'painting': {
       'oil': 'oil painting on canvas, visible brushstrokes, paint texture, artistic composition, paint layers, canvas texture, slight paint drips, natural paint flow, not a photo of a painting',
@@ -130,7 +130,7 @@ const enhancePromptForDalle = (prompt, metadata = {}) => {
 
   // Add medium-specific enhancements
   const mediumEnhancements = {
-    'photograph': 'photographic realism, camera perspective, natural lighting, slight imperfections',
+    'photograph': 'photographic realism, camera perspective, natural lighting, slight imperfections, minor grain',
     'painting': 'artistic technique, paint texture, canvas/paper surface, natural paint flow',
     'sketch': 'hand-drawn quality, pencil pressure variations, paper texture, eraser marks',
     'watercolor': 'water flow patterns, pigment bleeding, natural diffusion, paper buckling',
@@ -219,12 +219,45 @@ const generateAIImage = async (prompt, progressCallback = null, dimensions = nul
         .webp({ quality: 90 })
         .toBuffer();
 
+      // Add photo-specific post-processing for realism
+      let finalBuffer = processedBuffer;
+      if (metadata?.imageType?.toLowerCase() === 'photograph') {
+        try {
+          // Add realistic photo imperfections
+          finalBuffer = await sharp(processedBuffer)
+            .webp({ quality: 90 })
+            .toBuffer();
+          
+          // Add slight noise and grain for photo realism
+          const noiseBuffer = await sharp(processedBuffer)
+            .noise(0.1) // Add subtle noise
+            .webp({ quality: 90 })
+            .toBuffer();
+          
+          // Blend the noise with original for subtle effect
+          finalBuffer = await sharp(processedBuffer)
+            .composite([{
+              input: noiseBuffer,
+              blend: 'overlay',
+              opacity: 0.3
+            }])
+            .webp({ quality: 90 })
+            .toBuffer();
+            
+        } catch (postProcessError) {
+          console.warn('Photo post-processing failed, using original:', postProcessError);
+          finalBuffer = processedBuffer;
+        }
+      } else {
+        finalBuffer = processedBuffer;
+      }
+
       if (progressCallback) {
         progressCallback('Image processed, uploading to Cloudinary...');
       }
 
       // Upload to Cloudinary
-      const uploadResult = await uploadToCloudinary(processedBuffer);
+      const uploadResult = await uploadToCloudinary(finalBuffer, metadata);
 
       if (progressCallback) {
         progressCallback('Process completed successfully');

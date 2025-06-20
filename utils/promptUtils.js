@@ -15,14 +15,32 @@ async function generateAiPrompt(caption) {
       model: "gpt-4-turbo-preview",
       messages: [{
         role: "system",
-        content: `This prompt will be used to generate an image that should convincingly pass as human-made in a side-by-side guessing game. It should reflect the subject and artistic style of the original image, including imperfections or natural variations typical of a human-made work.
+        content: `You are an expert prompt engineer for creating images that must convincingly pass as human-made in a side-by-side guessing game. Your prompts should generate images that look authentically human-created, not AI-generated.
 
-Your task is to create prompts that:
-1. Specify an artistic medium (e.g., "film photograph", "oil painting", "watercolor", "charcoal sketch")
-2. Mention texture, lighting, and material details (e.g., "visible brushstrokes," "soft glare," "grainy finish," "washed out tones")
-3. Avoid sterile compositions or perfect symmetry - include framing imperfections, slight asymmetry, or natural object placement
-4. Favor grounded realism - avoid anything overly surreal or fantastical unless the original is clearly abstract or surreal
-5. Target ~15+ words, max 100 characters - specific but compact, avoid repetition or overly generic descriptions`
+CRITICAL RULES FOR PHOTOGRAPHS:
+- Use "film photograph" or "digital photograph" as the medium (not just "photo")
+- Include realistic photographic elements: "natural lighting", "slight grain", "lens distortion", "minor blur", "realistic shadows"
+- Specify camera characteristics: "taken with a camera", "realistic perspective", "authentic colors"
+- AVOID: "hyper-realistic", "professional photo", "perfect lighting" (these create uncanny AI tells)
+- AVOID: "3D render", "digital art", "illustration" (these are AI tells)
+
+CRITICAL RULES FOR PAINTINGS:
+- Specify actual painting medium: "oil painting on canvas", "watercolor on paper", "acrylic painting"
+- Include paint characteristics: "visible brushstrokes", "paint texture", "canvas grain", "paint drips"
+- AVOID: "photo of a painting", "render of painting" (these are AI tells)
+
+CRITICAL RULES FOR DIGITAL ART:
+- Specify digital medium: "digital illustration", "digital art", "digital composition"
+- AVOID: Photographic realism unless specifically requested
+
+GENERAL RULES:
+1. Specify artistic medium clearly (film photograph, oil painting, digital art, etc.)
+2. Include texture, lighting, and material details specific to the medium
+3. Add natural imperfections: slight asymmetry, framing issues, medium-specific flaws
+4. Favor grounded realism over perfect compositions
+5. Target 15-25 words, max 100 characters
+6. Use technical language that DALL-E 3 understands
+7. NEVER generate phrases that suggest AI creation or 3D rendering`
       }, {
         role: "user",
         content: `You are given a caption describing a piece of visual art:
@@ -30,12 +48,13 @@ Your task is to create prompts that:
 "${caption}"
 
 Create a new prompt for a different, creatively distinct piece of art that:
-- Uses the same artistic style (e.g., photorealistic, watercolor, abstract, etc.)
-- Stays in the same category or subject type (e.g., architecture → building, animal → different animal, abstract → abstract, landscape → landscape)
-- Changes the specific subject (e.g., not the exact same house or animal)
+- Uses the EXACT same artistic medium (photograph stays photograph, painting stays painting)
+- Stays in the same category or subject type (architecture → building, animal → different animal)
+- Changes the specific subject (not the exact same house or animal)
 - Keeps the tone grounded and believable — no fantasy unless the original is surreal
 - Keeps the result concise (under 100 characters)
 - Includes medium-specific details and natural imperfections
+- AVOIDS any phrases that would create AI tells or uncanny perfection
 
 Return ONLY the prompt text with no explanation or additional text.`
       }],

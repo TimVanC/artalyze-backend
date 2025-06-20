@@ -240,16 +240,18 @@ const generateImageDescription = async (imageUrl) => {
 3. DIGITAL ART: Computer-generated or digital illustrations
 4. MIXED MEDIA: Combinations of the above
 
-For photographs, identify the type (architecture, nature, street, portrait, landscape, etc.)
-For paintings, identify the medium (oil, watercolor, acrylic, gouache, etc.) and style
-For digital art, identify the style and technique
+CRITICAL CLASSIFICATION RULES:
+- PHOTOGRAPHS: Must look like real photos taken with a camera, showing realistic lighting, perspective, and details. Include film grain, lens characteristics, natural shadows, authentic colors.
+- PAINTINGS: Must look like actual paintings on canvas/paper, showing brushstrokes, paint texture, canvas grain, paint drips, or paper texture.
+- DIGITAL ART: Must look like computer-generated artwork, showing clean digital lines, digital composition, digital brush strokes.
 
-Be extremely precise in this categorization as it affects how AI images are generated. Pay special attention to:
-- Photographs should look like real photos, not 3D renders
-- Paintings should look like actual paintings, not photos of paintings
-- Digital art should look like digital artwork, not photographs
+PHOTO SUBTYPES: architecture, nature, street, portrait, landscape, still_life, documentary, candid, studio, macro, wildlife, urban, rural, abstract_photo
 
-This classification is critical for generating believable human-like images.`
+PAINTING SUBTYPES: oil, watercolor, acrylic, gouache, tempera, pastel, ink, charcoal, pencil, mixed_media
+
+DIGITAL ART SUBTYPES: illustration, concept_art, digital_painting, 3d_render, vector_art, pixel_art, digital_photo_manipulation
+
+Be extremely precise in this categorization as it affects how AI images are generated. This classification is critical for generating believable human-like images that match the original medium exactly.`
         },
         {
           role: "user",
