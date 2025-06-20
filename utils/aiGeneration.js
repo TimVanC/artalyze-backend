@@ -95,13 +95,43 @@ const calculateDallESize = (dimensions) => {
  * @returns {string} - Enhanced prompt
  */
 const enhancePromptForDalle = (prompt, metadata = {}) => {
+  const imageType = metadata?.imageType || 'mixed_media';
+  const subtype = metadata?.subtype || 'unknown';
   const style = metadata?.style || 'contemporary';
   const medium = metadata?.medium || 'mixed';
   
-  // Add style-specific enhancements
-  const styleEnhancements = {
-    'photograph': 'natural lighting, authentic camera perspective, realistic depth of field',
-    'painting': 'artistic brushwork, paint texture, natural color variations',
+  // Type-specific enhancements for DALL-E 3
+  const typeSpecificEnhancements = {
+    'photograph': {
+      'architecture': 'photograph taken with a camera, real architectural details, natural lighting, realistic perspective, authentic colors, no 3D rendering',
+      'nature': 'photograph captured in natural light, real environmental details, authentic colors, realistic depth of field, no digital art',
+      'street': 'candid photograph in urban setting, natural lighting, realistic street scene, authentic urban atmosphere, no illustration',
+      'portrait': 'photograph taken with a camera, natural lighting, realistic skin texture, authentic colors, real human features, no 3D model',
+      'landscape': 'photograph of landscape, natural lighting, realistic environmental details, authentic colors, real depth, no digital rendering',
+      'default': 'photograph taken with a camera, natural lighting, realistic details, authentic colors, no 3D rendering or digital art'
+    },
+    'painting': {
+      'oil': 'oil painting on canvas, visible brushstrokes, paint texture, artistic composition, paint layers, canvas texture, not a photo of a painting',
+      'watercolor': 'watercolor painting on paper, paint bleeding, paper texture, artistic flow, watercolor technique, not a photo of artwork',
+      'acrylic': 'acrylic painting on canvas, bold colors, paint layers, artistic technique, canvas texture, not a photo of a painting',
+      'gouache': 'gouache painting on paper, opaque paint texture, paper surface, artistic technique, not a photo of artwork',
+      'default': 'painting on canvas/paper, artistic technique, paint texture, not a photo of artwork'
+    },
+    'digital_art': {
+      'illustration': 'digital illustration, clean lines, digital composition, digital art style, not photographic',
+      'concept_art': 'digital concept art, artistic digital style, digital composition, not realistic photography',
+      'default': 'digital art, digital composition, digital style, not photographic realism'
+    }
+  };
+
+  // Get the appropriate enhancement based on image type and subtype
+  const typeEnhancements = typeSpecificEnhancements[imageType.toLowerCase()];
+  const enhancement = typeEnhancements?.[subtype.toLowerCase()] || typeEnhancements?.default || '';
+
+  // Add medium-specific enhancements
+  const mediumEnhancements = {
+    'photograph': 'photographic realism, camera perspective, natural lighting',
+    'painting': 'artistic technique, paint texture, canvas/paper surface',
     'sketch': 'hand-drawn quality, pencil pressure variations, paper texture',
     'watercolor': 'water flow patterns, pigment bleeding, natural diffusion',
     'oil': 'thick paint layers, brush stroke texture, natural paint flow',
@@ -109,10 +139,13 @@ const enhancePromptForDalle = (prompt, metadata = {}) => {
     'pencil': 'graphite texture, pressure variations, eraser marks'
   };
 
-  const enhancement = styleEnhancements[style.toLowerCase()] || '';
+  const mediumEnhancement = mediumEnhancements[medium.toLowerCase()] || '';
+
+  // Combine enhancements
+  const allEnhancements = [enhancement, mediumEnhancement].filter(Boolean).join(', ');
   
-  if (enhancement) {
-    return `${prompt}, ${enhancement}`;
+  if (allEnhancements) {
+    return `${prompt}, ${allEnhancements}`;
   }
   
   return prompt;

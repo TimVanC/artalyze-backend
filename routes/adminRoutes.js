@@ -338,7 +338,12 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
         sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: Starting AI generation (typically 30-45 seconds)...`, 'info');
         const aiImageUrl = await generateAIImage(remixedPrompt, (message) => {
           sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: ${message}`, 'info');
-        }, dimensions, imageAnalysis.metadata);
+        }, dimensions, {
+          ...imageAnalysis.metadata,
+          dimensions,
+          imageType: imageAnalysis.metadata?.imageType || 'mixed_media',
+          subtype: imageAnalysis.metadata?.subtype || 'unknown'
+        });
 
         if (!aiImageUrl) {
           sendProgress(sessionId, 'AI generation limit reached. Please try again in a few minutes.', 'error');
@@ -554,7 +559,12 @@ router.post('/regenerate-ai-image', async (req, res) => {
       }
     });
     
-    const newAiImageUrl = await generateAIImage(remixedPrompt, null, dimensions, imageAnalysis.metadata);
+    const newAiImageUrl = await generateAIImage(remixedPrompt, null, dimensions, {
+      ...imageAnalysis.metadata,
+      dimensions,
+      imageType: imageAnalysis.metadata?.imageType || 'mixed_media',
+      subtype: imageAnalysis.metadata?.subtype || 'unknown'
+    });
     if (!newAiImageUrl) {
       return res.status(429).json({ error: 'AI image generation failed. Please try again later.' });
     }
