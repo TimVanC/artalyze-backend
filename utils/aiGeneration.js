@@ -95,8 +95,8 @@ const calculateDallESize = (dimensions) => {
  * @returns {string} - Enhanced prompt
  */
 const enhancePromptForDalle = (prompt, metadata = {}) => {
-  const style = metadata.style || 'contemporary';
-  const medium = metadata.medium || 'mixed';
+  const style = metadata?.style || 'contemporary';
+  const medium = metadata?.medium || 'mixed';
   
   // Add style-specific enhancements
   const styleEnhancements = {
