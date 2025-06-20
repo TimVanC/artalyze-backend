@@ -89,13 +89,44 @@ const calculateDallESize = (dimensions) => {
 };
 
 /**
- * Generates an AI image using DALL·E 3
+ * Enhanced prompt processing for DALL-E 3
+ * @param {string} prompt - Original prompt
+ * @param {Object} metadata - Style metadata
+ * @returns {string} - Enhanced prompt
+ */
+const enhancePromptForDalle = (prompt, metadata = {}) => {
+  const style = metadata.style || 'contemporary';
+  const medium = metadata.medium || 'mixed';
+  
+  // Add style-specific enhancements
+  const styleEnhancements = {
+    'photograph': 'natural lighting, authentic camera perspective, realistic depth of field',
+    'painting': 'artistic brushwork, paint texture, natural color variations',
+    'sketch': 'hand-drawn quality, pencil pressure variations, paper texture',
+    'watercolor': 'water flow patterns, pigment bleeding, natural diffusion',
+    'oil': 'thick paint layers, brush stroke texture, natural paint flow',
+    'charcoal': 'charcoal texture, smudging, paper grain',
+    'pencil': 'graphite texture, pressure variations, eraser marks'
+  };
+
+  const enhancement = styleEnhancements[style.toLowerCase()] || '';
+  
+  if (enhancement) {
+    return `${prompt}, ${enhancement}`;
+  }
+  
+  return prompt;
+};
+
+/**
+ * Generates an AI image using DALL·E 3 with enhanced parameters
  * @param {string} prompt - The prompt for image generation
  * @param {Function} [progressCallback] - Optional callback for progress updates
  * @param {Object} [dimensions] - Optional dimensions for the output image
+ * @param {Object} [metadata] - Optional style metadata for enhancement
  * @returns {Promise<string>} - The generated image URL
  */
-const generateAIImage = async (prompt, progressCallback = null, dimensions = null) => {
+const generateAIImage = async (prompt, progressCallback = null, dimensions = null, metadata = null) => {
   let lastError = null;
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -112,14 +143,18 @@ const generateAIImage = async (prompt, progressCallback = null, dimensions = nul
         console.log(`Aspect ratio matching: ${dimensions.width}x${dimensions.height} (${dimensions.aspectRatio.toFixed(2)}) → ${size}`);
       }
 
-      // Generate image with DALL·E 3
+      // Enhance prompt for better results
+      const enhancedPrompt = enhancePromptForDalle(prompt, metadata);
+      console.log(`Enhanced prompt: ${enhancedPrompt}`);
+
+      // Generate image with DALL·E 3 using enhanced parameters
       const response = await openai.images.generate({
         model: "dall-e-3",
-        prompt: prompt,
+        prompt: enhancedPrompt,
         n: 1,
         size: size,
-        quality: "standard",
-        style: "natural"
+        quality: "hd", // Use HD quality for better results
+        style: "natural" // Keep natural style for more human-like results
       });
 
       const imageUrl = response.data[0].url;
