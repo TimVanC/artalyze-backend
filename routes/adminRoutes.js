@@ -859,4 +859,45 @@ router.delete('/bulk-delete-selected-pairs', async (req, res) => {
   }
 });
 
+// Get image pairs for a specific date
+router.get('/image-pairs/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+    const targetDate = new Date(date);
+    targetDate.setUTCHours(5, 0, 0, 0); // Set to midnight EST
+
+    const imagePair = await ImagePairCollection.findOne({ scheduledDate: targetDate });
+    
+    if (!imagePair) {
+      return res.json([]);
+    }
+
+    res.json(imagePair.pairs || []);
+  } catch (error) {
+    console.error('Error fetching image pairs:', error);
+    res.status(500).json({ error: 'Failed to fetch image pairs' });
+  }
+});
+
+// Get pair counts for all days (for calendar highlighting)
+router.get('/pair-counts', async (req, res) => {
+  try {
+    const pairCounts = {};
+    
+    // Get all image pairs from the database
+    const allImagePairs = await ImagePairCollection.find({});
+    
+    // Process each date and count pairs
+    allImagePairs.forEach(imagePair => {
+      const dateString = imagePair.scheduledDate.toISOString().split('T')[0];
+      pairCounts[dateString] = imagePair.pairs ? imagePair.pairs.length : 0;
+    });
+    
+    res.json(pairCounts);
+  } catch (error) {
+    console.error('Error fetching pair counts:', error);
+    res.status(500).json({ error: 'Failed to fetch pair counts' });
+  }
+});
+
 module.exports = router;
