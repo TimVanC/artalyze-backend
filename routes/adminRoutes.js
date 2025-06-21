@@ -883,16 +883,13 @@ router.get('/image-pairs/:date', async (req, res) => {
 router.get('/pair-counts', async (req, res) => {
   try {
     const pairCounts = {};
-    
-    // Get all image pairs from the database
-    const allImagePairs = await ImagePairCollection.find({});
-    
-    // Process each date and count pairs
+    // Only fetch scheduledDate and pairs fields, use lean for performance
+    const allImagePairs = await ImagePairCollection.find({}, { scheduledDate: 1, pairs: 1 }).lean();
     allImagePairs.forEach(imagePair => {
-      const dateString = imagePair.scheduledDate.toISOString().split('T')[0];
+      // Always use UTC date string (YYYY-MM-DD)
+      const dateString = new Date(imagePair.scheduledDate).toISOString().slice(0, 10);
       pairCounts[dateString] = imagePair.pairs ? imagePair.pairs.length : 0;
     });
-    
     res.json(pairCounts);
   } catch (error) {
     console.error('Error fetching pair counts:', error);
