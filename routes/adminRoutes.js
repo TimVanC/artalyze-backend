@@ -522,9 +522,16 @@ router.post('/regenerate-ai-image', async (req, res) => {
       return res.status(400).json({ error: 'Pair ID and scheduled date are required.' });
     }
 
-    // Find the document for the given date
+    // Use the same date range query as get-image-pairs-by-date
+    const queryStart = new Date(scheduledDate);
+    queryStart.setUTCHours(0, 0, 0, 0);
+
+    const queryEnd = new Date(queryStart);
+    queryEnd.setUTCHours(23, 59, 59, 999);
+
+    // Find the document for the given date range
     const doc = await ImagePairCollection.findOne({ 
-      scheduledDate: new Date(scheduledDate)
+      scheduledDate: { $gte: queryStart, $lte: queryEnd }
     });
     console.log('Found document:', doc);
     if (!doc) {
@@ -572,7 +579,7 @@ router.post('/regenerate-ai-image', async (req, res) => {
     // Update the specific pair in the array
     const updateResult = await ImagePairCollection.findOneAndUpdate(
       { 
-        scheduledDate: new Date(scheduledDate),
+        scheduledDate: { $gte: queryStart, $lte: queryEnd },
         'pairs._id': pairId
       },
       {
@@ -618,9 +625,16 @@ router.delete('/delete-pair', async (req, res) => {
       return res.status(400).json({ error: 'Pair ID and scheduled date are required.' });
     }
 
+    // Use the same date range query as get-image-pairs-by-date
+    const queryStart = new Date(scheduledDate);
+    queryStart.setUTCHours(0, 0, 0, 0);
+
+    const queryEnd = new Date(queryStart);
+    queryEnd.setUTCHours(23, 59, 59, 999);
+
     // First check if the document exists
     const doc = await ImagePairCollection.findOne({ 
-      scheduledDate: new Date(scheduledDate)
+      scheduledDate: { $gte: queryStart, $lte: queryEnd }
     });
     
     if (!doc) {
@@ -635,7 +649,7 @@ router.delete('/delete-pair', async (req, res) => {
 
     // Remove the pair using $pull
     const result = await ImagePairCollection.findOneAndUpdate(
-      { scheduledDate: new Date(scheduledDate) },
+      { scheduledDate: { $gte: queryStart, $lte: queryEnd } },
       { $pull: { pairs: { _id: pairId } } },
       { new: true }
     );
