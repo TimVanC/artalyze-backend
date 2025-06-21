@@ -573,7 +573,7 @@ router.post('/regenerate-ai-image', async (req, res) => {
     const updateResult = await ImagePairCollection.findOneAndUpdate(
       { 
         scheduledDate: new Date(scheduledDate),
-        'pairs._id': mongoose.Types.ObjectId(pairId)
+        'pairs._id': pairId
       },
       {
         $set: {
@@ -636,7 +636,7 @@ router.delete('/delete-pair', async (req, res) => {
     // Remove the pair using $pull
     const result = await ImagePairCollection.findOneAndUpdate(
       { scheduledDate: new Date(scheduledDate) },
-      { $pull: { pairs: { _id: mongoose.Types.ObjectId(pairId) } } },
+      { $pull: { pairs: { _id: pairId } } },
       { new: true }
     );
 
