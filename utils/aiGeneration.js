@@ -1,6 +1,12 @@
 const Replicate = require('replicate');
 const sharp = require('sharp');
 
+// Check if required environment variables are set
+if (!process.env.REPLICATE_API_TOKEN) {
+  console.error('ERROR: REPLICATE_API_TOKEN environment variable is not set');
+  throw new Error('REPLICATE_API_TOKEN environment variable is required for AI image generation');
+}
+
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
 });
@@ -169,25 +175,41 @@ async function generateAIImage(prompt, progressCallback = null, dimensions = nul
     console.log(`Negative prompt: ${negativePrompt}`);
 
     // Generate image using SDXL with optimized parameters
-    const output = await replicate.run(
-      "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
-      {
-        input: {
-          prompt: enhancedPrompt,
-          negative_prompt: negativePrompt,
-          width: width,
-          height: height,
-          num_outputs: 1,
-          scheduler: "K_EULER_ANCESTRAL", // Better for artistic styles
-          num_inference_steps: 60, // Increased for better quality
-          guidance_scale: 8.5, // Slightly higher for better adherence
-          prompt_strength: 0.85, // Slightly higher for better prompt following
-          seed: Math.floor(Math.random() * 1000000), // Random seed for variety
-          refine: "expert_ensemble_refiner", // Use expert ensemble for better quality
-          high_noise_frac: 0.8, // Better for artistic styles
+    let output;
+    try {
+      output = await replicate.run(
+        "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+        {
+          input: {
+            prompt: enhancedPrompt,
+            negative_prompt: negativePrompt,
+            width: width,
+            height: height,
+            num_outputs: 1,
+            scheduler: "K_EULER_ANCESTRAL", // Better for artistic styles
+            num_inference_steps: 60, // Increased for better quality
+            guidance_scale: 8.5, // Slightly higher for better adherence
+            prompt_strength: 0.85, // Slightly higher for better prompt following
+            seed: Math.floor(Math.random() * 1000000), // Random seed for variety
+            refine: "expert_ensemble_refiner", // Use expert ensemble for better quality
+            high_noise_frac: 0.8, // Better for artistic styles
+          }
         }
-      }
-    );
+      );
+    } catch (replicateError) {
+      console.error('Replicate API error:', replicateError);
+      console.error('Error details:', {
+        message: replicateError.message,
+        status: replicateError.status,
+        statusText: replicateError.statusText,
+        response: replicateError.response
+      });
+      throw new Error(`Replicate API error: ${replicateError.message}`);
+    }
+
+    if (!output || !output[0]) {
+      throw new Error('No output received from Replicate API');
+    }
 
     if (progressCallback) {
       progressCallback('Processing generated image...');
