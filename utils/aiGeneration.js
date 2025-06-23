@@ -1,14 +1,14 @@
-const Replicate = require('replicate');
+const OpenAI = require('openai');
 const sharp = require('sharp');
 
 // Check if required environment variables are set
-if (!process.env.REPLICATE_API_TOKEN) {
-  console.error('ERROR: REPLICATE_API_TOKEN environment variable is not set');
-  throw new Error('REPLICATE_API_TOKEN environment variable is required for AI image generation');
+if (!process.env.OPENAI_API_KEY) {
+  console.error('ERROR: OPENAI_API_KEY environment variable is not set');
+  throw new Error('OPENAI_API_KEY environment variable is required for AI image generation');
 }
 
-const replicate = new Replicate({
-  auth: process.env.REPLICATE_API_TOKEN,
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 /**
@@ -134,7 +134,7 @@ function addHumanImperfections(prompt, style, medium) {
 }
 
 /**
- * Generate an AI image using Stable Diffusion XL with enhanced parameters
+ * Generate an AI image using DALL-E 3 with enhanced parameters
  * @param {string} prompt Image generation prompt
  * @param {Function|null} progressCallback Optional progress callback function
  * @param {Object} dimensions Image dimensions
@@ -147,78 +147,56 @@ async function generateAIImage(prompt, progressCallback = null, dimensions = nul
   try {
     // Send progress update if callback provided
     if (progressCallback) {
-      progressCallback('Initializing AI generation...');
+      progressCallback('Initializing DALL-E 3 generation...');
     }
 
     // Use default dimensions if not provided
-    const finalDimensions = dimensions || { width: 512, height: 512 };
+    const finalDimensions = dimensions || { width: 1024, height: 1024 };
     
-    // Ensure dimensions are multiples of 8 (required by SDXL)
-    const width = Math.round(finalDimensions.width / 8) * 8;
-    const height = Math.round(finalDimensions.height / 8) * 8;
+    // DALL-E 3 supports specific sizes, so we need to map to supported options
+    const getDalleSize = (width, height) => {
+      const aspectRatio = width / height;
+      
+      if (aspectRatio === 1) return "1024x1024";
+      if (aspectRatio > 1) return "1792x1024"; // Landscape
+      if (aspectRatio < 1) return "1024x1792"; // Portrait
+      
+      return "1024x1024"; // Default to square
+    };
 
-    // Extract style and medium from metadata or prompt
-    const style = metadata.style || extractStyleFromPrompt(prompt);
-    const medium = metadata.medium || extractMediumFromPrompt(prompt);
-
-    // Get enhanced negative prompt
-    const negativePrompt = getEnhancedNegativePrompt(style, medium);
-
-    // Enhanced prompt with human imperfection cues
-    const enhancedPrompt = addHumanImperfections(prompt, style, medium);
+    const dalleSize = getDalleSize(finalDimensions.width, finalDimensions.height);
 
     if (progressCallback) {
-      progressCallback('Generating AI image with enhanced parameters...');
+      progressCallback('Generating image with DALL-E 3...');
     }
 
-    console.log(`Generating AI image with enhanced prompt: ${enhancedPrompt}`);
-    console.log(`Negative prompt: ${negativePrompt}`);
+    console.log(`Generating DALL-E 3 image with prompt: ${prompt}`);
+    console.log(`Size: ${dalleSize}`);
 
-    // Generate image using SDXL with optimized parameters
-    let output;
-    try {
-      output = await replicate.run(
-        "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
-        {
-          input: {
-            prompt: enhancedPrompt,
-            negative_prompt: negativePrompt,
-            width: width,
-            height: height,
-            num_outputs: 1,
-            scheduler: "K_EULER_ANCESTRAL", // Better for artistic styles
-            num_inference_steps: 60, // Increased for better quality
-            guidance_scale: 8.5, // Slightly higher for better adherence
-            prompt_strength: 0.85, // Slightly higher for better prompt following
-            seed: Math.floor(Math.random() * 1000000), // Random seed for variety
-            refine: "expert_ensemble_refiner", // Use expert ensemble for better quality
-            high_noise_frac: 0.8, // Better for artistic styles
-          }
-        }
-      );
-    } catch (replicateError) {
-      console.error('Replicate API error:', replicateError);
-      console.error('Error details:', {
-        message: replicateError.message,
-        status: replicateError.status,
-        statusText: replicateError.statusText,
-        response: replicateError.response
-      });
-      throw new Error(`Replicate API error: ${replicateError.message}`);
-    }
-
-    if (!output || !output[0]) {
-      throw new Error('No output received from Replicate API');
-    }
+    // Generate image using DALL-E 3
+    const response = await openai.images.generate({
+      model: "dall-e-3",
+      prompt: prompt,
+      n: 1,
+      size: dalleSize,
+      quality: "hd", // High quality
+      style: "natural" // Natural style for more human-like results
+    });
 
     if (progressCallback) {
       progressCallback('Processing generated image...');
     }
 
+    // Get the image URL from the response
+    const imageUrl = response.data[0].url;
+    
+    if (!imageUrl) {
+      throw new Error('No image URL received from DALL-E 3');
+    }
+
     // Download the generated image
-    const imageUrl = output[0];
-    const response = await fetch(imageUrl);
-    const arrayBuffer = await response.arrayBuffer();
+    const imageResponse = await fetch(imageUrl);
+    const arrayBuffer = await imageResponse.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
     // Process with sharp to ensure webp format and quality
@@ -257,13 +235,13 @@ async function generateAIImage(prompt, progressCallback = null, dimensions = nul
     });
 
     if (progressCallback) {
-      progressCallback('AI generation complete!');
+      progressCallback('DALL-E 3 generation complete!');
     }
 
     return uploadResult.secure_url;
 
   } catch (error) {
-    console.error('Error generating AI image:', error);
+    console.error('Error generating AI image with DALL-E 3:', error);
     if (progressCallback) {
       progressCallback(`Error: ${error.message}`);
     }
