@@ -4,7 +4,7 @@ require('dotenv').config();
 
 const username = process.env.MONGO_USER;
 const password = process.env.MONGO_PASS;
-const dbName = process.env.NODE_ENV === "staging" ? "artalyze_staging" : process.env.MONGO_DB_NAME || "artalyze";
+const dbName = process.env.NODE_ENV === "staging" ? "artalyze_staging" : "<database-name>";
 const uri = `mongodb+srv://${username}:${password}@cluster0.rr4c6.mongodb.net/${dbName}?retryWrites=true&w=majority`;
 
 console.log('Database connection details:');
