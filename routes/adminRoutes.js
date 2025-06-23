@@ -34,6 +34,7 @@ const upload = multer({ storage });
 // Dynamically select collection name based on environment
 const collectionName = process.env.NODE_ENV === "staging" ? "staging_imagePairs" : "imagePairs";
 console.log('Using MongoDB collection:', collectionName);
+console.log('NODE_ENV:', process.env.NODE_ENV);
 const ImagePairCollection = mongoose.model(collectionName, ImagePair.schema);
 
 // Ensure authentication and admin access for all routes except login
@@ -922,16 +923,23 @@ router.delete('/bulk-delete-selected-pairs', async (req, res) => {
 router.get('/image-pairs/:date', async (req, res) => {
   try {
     const { date } = req.params;
+    console.log('Fetching image pairs for date:', date, 'from collection:', collectionName);
+    
     const targetDate = new Date(date);
     targetDate.setUTCHours(5, 0, 0, 0); // Set to midnight EST
+    console.log('Target date (UTC):', targetDate.toISOString());
 
     const imagePair = await ImagePairCollection.findOne({ scheduledDate: targetDate });
+    console.log('Found image pair document:', imagePair ? 'Yes' : 'No');
     
     if (!imagePair) {
+      console.log('No image pairs found for date:', date);
       return res.json([]);
     }
 
-    res.json(imagePair.pairs || []);
+    const pairs = imagePair.pairs || [];
+    console.log('Returning', pairs.length, 'pairs for date:', date);
+    res.json(pairs);
   } catch (error) {
     console.error('Error fetching image pairs:', error);
     res.status(500).json({ error: 'Failed to fetch image pairs' });
@@ -941,14 +949,21 @@ router.get('/image-pairs/:date', async (req, res) => {
 // Get pair counts for all days (for calendar highlighting)
 router.get('/pair-counts', async (req, res) => {
   try {
+    console.log('Fetching pair counts from collection:', collectionName);
     const pairCounts = {};
     // Only fetch scheduledDate and pairs fields, use lean for performance
     const allImagePairs = await ImagePairCollection.find({}, { scheduledDate: 1, pairs: 1 }).lean();
+    console.log('Found', allImagePairs.length, 'image pair documents in database');
+    
     allImagePairs.forEach(imagePair => {
       // Always use UTC date string (YYYY-MM-DD)
       const dateString = new Date(imagePair.scheduledDate).toISOString().slice(0, 10);
-      pairCounts[dateString] = imagePair.pairs ? imagePair.pairs.length : 0;
+      const pairCount = imagePair.pairs ? imagePair.pairs.length : 0;
+      pairCounts[dateString] = pairCount;
+      console.log(`Date ${dateString}: ${pairCount} pairs`);
     });
+    
+    console.log('Total pair counts:', pairCounts);
     res.json(pairCounts);
   } catch (error) {
     console.error('Error fetching pair counts:', error);
