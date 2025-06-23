@@ -98,7 +98,7 @@ async function generateAiImage(prompt, dimensions, metadata = {}) {
       prompt: prompt,
       n: 1,
       size: dalleSize,
-      quality: "hd", // High quality
+      quality: "standard", // Standard quality (cheaper)
       style: "natural" // Natural style for more human-like results
     });
 
