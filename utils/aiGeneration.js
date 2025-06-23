@@ -134,6 +134,36 @@ function addHumanImperfections(prompt, style, medium) {
 }
 
 /**
+ * Sanitize prompt to avoid DALL-E 3 content policy violations
+ */
+function sanitizePrompt(prompt) {
+  if (!prompt) return '';
+  
+  // Remove potentially problematic content
+  const problematicTerms = [
+    'nude', 'naked', 'explicit', 'sexual', 'violence', 'blood', 'gore',
+    'weapon', 'gun', 'knife', 'sword', 'bomb', 'explosion', 'fire',
+    'celebrity', 'famous person', 'politician', 'real person',
+    'copyright', 'trademark', 'logo', 'brand', 'company'
+  ];
+  
+  let sanitized = prompt.toLowerCase();
+  problematicTerms.forEach(term => {
+    sanitized = sanitized.replace(new RegExp(term, 'gi'), '');
+  });
+  
+  // Clean up extra spaces and punctuation
+  sanitized = sanitized.replace(/\s+/g, ' ').trim();
+  
+  // Ensure the prompt is not empty after sanitization
+  if (!sanitized || sanitized.length < 10) {
+    return 'abstract art composition with vibrant colors and artistic elements';
+  }
+  
+  return sanitized;
+}
+
+/**
  * Generate an AI image using DALL-E 3 with enhanced parameters
  * @param {string} prompt Image generation prompt
  * @param {Function|null} progressCallback Optional progress callback function
@@ -149,6 +179,11 @@ async function generateAIImage(prompt, progressCallback = null, dimensions = nul
     if (progressCallback) {
       progressCallback('Initializing DALL-E 3 generation...');
     }
+
+    // Sanitize the prompt to avoid content policy violations
+    const sanitizedPrompt = sanitizePrompt(prompt);
+    console.log(`Original prompt: ${prompt}`);
+    console.log(`Sanitized prompt: ${sanitizedPrompt}`);
 
     // Use default dimensions if not provided
     const finalDimensions = dimensions || { width: 1024, height: 1024 };
@@ -170,13 +205,13 @@ async function generateAIImage(prompt, progressCallback = null, dimensions = nul
       progressCallback('Generating image with DALL-E 3...');
     }
 
-    console.log(`Generating DALL-E 3 image with prompt: ${prompt}`);
+    console.log(`Generating DALL-E 3 image with prompt: ${sanitizedPrompt}`);
     console.log(`Size: ${dalleSize}`);
 
     // Generate image using DALL-E 3
     const response = await openai.images.generate({
       model: "dall-e-3",
-      prompt: prompt,
+      prompt: sanitizedPrompt,
       n: 1,
       size: dalleSize,
       quality: "standard", // Standard quality (cheaper)
@@ -242,6 +277,36 @@ async function generateAIImage(prompt, progressCallback = null, dimensions = nul
 
   } catch (error) {
     console.error('Error generating AI image with DALL-E 3:', error);
+    
+    // Handle specific DALL-E 3 content policy errors
+    if (error.status === 400 && error.error?.type === 'image_generation_user_error') {
+      const contentError = new Error('DALL-E 3 rejected the prompt due to content policy violations. Please try with a different image or description.');
+      contentError.name = 'ContentPolicyError';
+      if (progressCallback) {
+        progressCallback(`Error: ${contentError.message}`);
+      }
+      throw contentError;
+    }
+    
+    // Handle other specific errors
+    if (error.message && error.message.includes('timeout')) {
+      const timeoutError = new Error('DALL-E 3 generation timed out. This can take 30-60 seconds. Please try again.');
+      timeoutError.name = 'TimeoutError';
+      if (progressCallback) {
+        progressCallback(`Error: ${timeoutError.message}`);
+      }
+      throw timeoutError;
+    }
+    
+    if (error.message && error.message.includes('billing')) {
+      const billingError = new Error('OpenAI billing issue. Please check your OpenAI account billing status.');
+      billingError.name = 'BillingError';
+      if (progressCallback) {
+        progressCallback(`Error: ${billingError.message}`);
+      }
+      throw billingError;
+    }
+    
     if (progressCallback) {
       progressCallback(`Error: ${error.message}`);
     }
