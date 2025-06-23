@@ -31,6 +31,8 @@ app.use(cors({
         : [
             'https://artalyze-admin.vercel.app',
             'https://artalyze.vercel.app',
+            'https://www.artalyze.app',
+            'https://artalyze.app',
             'https://artalyze-backend.up.railway.app',
             ...otherOrigins
           ],
