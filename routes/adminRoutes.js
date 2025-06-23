@@ -609,7 +609,30 @@ router.post('/regenerate-ai-image', async (req, res) => {
 
   } catch (error) {
     console.error('Regeneration Error:', error);
-    res.status(500).json({ error: 'Failed to regenerate AI image' });
+    
+    // Provide more specific error messages
+    if (error.message && error.message.includes('timeout')) {
+      return res.status(408).json({ 
+        error: 'AI image generation timed out. DALL-E 3 generation can take 30-60 seconds. Please try again.' 
+      });
+    }
+    
+    if (error.message && error.message.includes('billing')) {
+      return res.status(402).json({ 
+        error: 'OpenAI billing issue. Please check your OpenAI account billing status.' 
+      });
+    }
+    
+    if (error.message && error.message.includes('rate limit')) {
+      return res.status(429).json({ 
+        error: 'OpenAI rate limit exceeded. Please wait a moment and try again.' 
+      });
+    }
+    
+    res.status(500).json({ 
+      error: 'Failed to regenerate AI image',
+      details: error.message || 'Unknown error occurred'
+    });
   }
 });
 
