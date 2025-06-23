@@ -10,7 +10,7 @@ const streamifier = require('streamifier');
 const adminController = require('../controllers/adminController');
 const sharp = require('sharp');
 const OpenAI = require('openai');
-const { generateAIImage } = require('../utils/aiGeneration');
+const { generateAiImage } = require('../utils/imageGenUtils');
 const jwt = require('jsonwebtoken');
 const { generateImageDescription, remixCaption } = require('../utils/textProcessing');
 const axios = require('axios');
@@ -336,9 +336,7 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
       try {
         // Generate AI image
         sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: Starting AI generation (typically 30-45 seconds)...`, 'info');
-        const aiImageUrl = await generateAIImage(remixedPrompt, (message) => {
-          sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: ${message}`, 'info');
-        }, dimensions, {
+        const aiImageUrl = await generateAiImage(remixedPrompt, dimensions, {
           ...imageAnalysis.metadata,
           dimensions,
           imageType: imageAnalysis.metadata?.imageType || 'mixed_media',
@@ -595,7 +593,7 @@ router.post('/regenerate-ai-image', async (req, res) => {
       }
     });
     
-    const newAiImageUrl = await generateAIImage(remixedPrompt, null, dimensions, {
+    const newAiImageUrl = await generateAiImage(remixedPrompt, dimensions, {
       ...imageAnalysis.metadata,
       dimensions,
       imageType: imageAnalysis.metadata?.imageType || 'mixed_media',
@@ -790,7 +788,7 @@ router.post('/bulk-regenerate-selected-ai-images', async (req, res) => {
           }
         });
         
-        const newAiImageUrl = await generateAIImage(remixedPrompt, null, dimensions, {
+        const newAiImageUrl = await generateAiImage(remixedPrompt, dimensions, {
           ...imageAnalysis.metadata,
           dimensions,
           imageType: imageAnalysis.metadata?.imageType || 'mixed_media',
