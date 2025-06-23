@@ -337,14 +337,14 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
       try {
         // Generate AI image
         sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: Starting AI generation (typically 30-45 seconds)...`, 'info');
-        const aiImageUrl = await generateAiImage(remixedPrompt, dimensions, {
+        const aiImageBuffer = await generateAiImage(remixedPrompt, dimensions, {
           ...imageAnalysis.metadata,
           dimensions,
           imageType: imageAnalysis.metadata?.imageType || 'mixed_media',
           subtype: imageAnalysis.metadata?.subtype || 'unknown'
         });
 
-        if (!aiImageUrl) {
+        if (!aiImageBuffer) {
           sendProgress(sessionId, 'AI generation limit reached. Please try again in a few minutes.', 'error');
           return res.status(429).json({ 
             error: 'AI image generation skipped due to API limits',
@@ -355,6 +355,22 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
 
         sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: AI generation complete`, 'success');
 
+        // Upload AI image to Cloudinary
+        sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: Uploading AI image to Cloudinary...`, 'info');
+        let aiUploadResult;
+        try {
+          aiUploadResult = await uploadToCloudinary(aiImageBuffer, 'artalyze/aiImages');
+        } catch (uploadError) {
+          console.error('Cloudinary AI Upload Error:', uploadError);
+          return res.status(500).json({ error: 'AI image upload failed' });
+        }
+
+        if (!aiUploadResult?.secure_url) {
+          return res.status(500).json({ error: 'Failed to retrieve AI image URL from Cloudinary' });
+        }
+
+        sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: AI image uploaded successfully`, 'success');
+
         // Save to database
         sendProgress(sessionId, `Image ${currentImageIndex}/${totalImages}: Finding optimal scheduling date...`, 'info');
         const targetDate = await findNextAvailableDate();
@@ -363,7 +379,7 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
         const imagePairDoc = await saveImagePair(
           targetDate,
           humanUploadResult.secure_url,
-          aiImageUrl,
+          aiUploadResult.secure_url,
           { 
             description: imageAnalysis.description,
             styleAnalysis: imageAnalysis.styleAnalysis,
@@ -594,14 +610,27 @@ router.post('/regenerate-ai-image', async (req, res) => {
       }
     });
     
-    const newAiImageUrl = await generateAiImage(remixedPrompt, dimensions, {
+    const newAiImageBuffer = await generateAiImage(remixedPrompt, dimensions, {
       ...imageAnalysis.metadata,
       dimensions,
       imageType: imageAnalysis.metadata?.imageType || 'mixed_media',
       subtype: imageAnalysis.metadata?.subtype || 'unknown'
     });
-    if (!newAiImageUrl) {
+    if (!newAiImageBuffer) {
       return res.status(429).json({ error: 'AI image generation failed. Please try again later.' });
+    }
+
+    // Upload AI image to Cloudinary
+    let newAiUploadResult;
+    try {
+      newAiUploadResult = await uploadToCloudinary(newAiImageBuffer, 'artalyze/aiImages');
+    } catch (uploadError) {
+      console.error('Cloudinary AI Upload Error:', uploadError);
+      return res.status(500).json({ error: 'AI image upload failed' });
+    }
+
+    if (!newAiUploadResult?.secure_url) {
+      return res.status(500).json({ error: 'Failed to retrieve AI image URL from Cloudinary' });
     }
 
     // Update the specific pair in the array
@@ -612,7 +641,7 @@ router.post('/regenerate-ai-image', async (req, res) => {
       },
       {
         $set: {
-          'pairs.$.aiImageURL': newAiImageUrl,
+          'pairs.$.aiImageURL': newAiUploadResult.secure_url,
           'pairs.$.metadata': {
             description: imageAnalysis.description,
             styleAnalysis: imageAnalysis.styleAnalysis,
@@ -631,7 +660,7 @@ router.post('/regenerate-ai-image', async (req, res) => {
 
     res.json({ 
       message: 'AI image regenerated successfully',
-      newAiImageUrl,
+      newAiImageUrl: newAiUploadResult.secure_url,
       pairId
     });
 
@@ -789,28 +818,41 @@ router.post('/bulk-regenerate-selected-ai-images', async (req, res) => {
           }
         });
         
-        const newAiImageUrl = await generateAiImage(remixedPrompt, dimensions, {
+        const newAiImageBuffer = await generateAiImage(remixedPrompt, dimensions, {
           ...imageAnalysis.metadata,
           dimensions,
           imageType: imageAnalysis.metadata?.imageType || 'mixed_media',
           subtype: imageAnalysis.metadata?.subtype || 'unknown'
         });
 
-        if (newAiImageUrl) {
-          // Update the specific pair in the updatedPairs array
-          const pairIndex = updatedPairs.findIndex(p => p._id.toString() === pair._id.toString());
-          if (pairIndex !== -1) {
-            updatedPairs[pairIndex] = {
-              ...updatedPairs[pairIndex].toObject(),
-              aiImageURL: newAiImageUrl,
-              metadata: {
-                description: imageAnalysis.description,
-                styleAnalysis: imageAnalysis.styleAnalysis,
-                remixedPrompt,
-                dimensions,
-                regeneratedAt: new Date()
-              }
-            };
+        if (newAiImageBuffer) {
+          // Upload AI image to Cloudinary
+          let newAiUploadResult;
+          try {
+            newAiUploadResult = await uploadToCloudinary(newAiImageBuffer, 'artalyze/aiImages');
+          } catch (uploadError) {
+            console.error(`Cloudinary AI Upload Error for pair ${pair._id}:`, uploadError);
+            continue; // Skip this pair and continue with others
+          }
+
+          if (newAiUploadResult?.secure_url) {
+            // Update the specific pair in the updatedPairs array
+            const pairIndex = updatedPairs.findIndex(p => p._id.toString() === pair._id.toString());
+            if (pairIndex !== -1) {
+              updatedPairs[pairIndex] = {
+                ...updatedPairs[pairIndex].toObject(),
+                aiImageURL: newAiUploadResult.secure_url,
+                metadata: {
+                  description: imageAnalysis.description,
+                  styleAnalysis: imageAnalysis.styleAnalysis,
+                  remixedPrompt,
+                  dimensions,
+                  regeneratedAt: new Date()
+                }
+              };
+            }
+          } else {
+            console.warn(`Failed to get Cloudinary URL for pair ${pair._id}`);
           }
         } else {
           console.warn(`Failed to regenerate AI image for pair ${pair._id}`);
