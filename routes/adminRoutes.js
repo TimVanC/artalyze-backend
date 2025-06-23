@@ -391,6 +391,35 @@ router.post('/upload-human-image', upload.single('humanImage'), async (req, res)
       } catch (error) {
         console.error('Error in AI generation or save:', error);
         sendProgress(sessionId, `Error: ${error.message}`, 'error');
+        
+        // Provide more specific error messages for DALL-E 3 issues
+        if (error.message && error.message.includes('timeout')) {
+          sendProgress(sessionId, 'DALL-E 3 generation timed out. This can take 30-60 seconds. Please try again.', 'error');
+          return res.status(408).json({ 
+            error: 'AI image generation timed out. DALL-E 3 generation can take 30-60 seconds. Please try again.',
+            humanImageURL: humanUploadResult.secure_url,
+            description: imageAnalysis.description
+          });
+        }
+        
+        if (error.message && error.message.includes('billing')) {
+          sendProgress(sessionId, 'OpenAI billing issue. Please check your OpenAI account billing status.', 'error');
+          return res.status(402).json({ 
+            error: 'OpenAI billing issue. Please check your OpenAI account billing status.',
+            humanImageURL: humanUploadResult.secure_url,
+            description: imageAnalysis.description
+          });
+        }
+        
+        if (error.message && error.message.includes('rate limit')) {
+          sendProgress(sessionId, 'OpenAI rate limit exceeded. Please wait a moment and try again.', 'error');
+          return res.status(429).json({ 
+            error: 'OpenAI rate limit exceeded. Please wait a moment and try again.',
+            humanImageURL: humanUploadResult.secure_url,
+            description: imageAnalysis.description
+          });
+        }
+        
         throw error;
       }
 
@@ -793,6 +822,15 @@ router.post('/bulk-regenerate-selected-ai-images', async (req, res) => {
 
       } catch (error) {
         console.error(`Error regenerating pair ${pair._id}:`, error);
+        
+        // Provide more specific error messages for DALL-E 3 issues
+        if (error.message && error.message.includes('timeout')) {
+          console.error(`DALL-E 3 generation timed out for pair ${pair._id}. This can take 30-60 seconds.`);
+        } else if (error.message && error.message.includes('billing')) {
+          console.error(`OpenAI billing issue for pair ${pair._id}. Please check your OpenAI account billing status.`);
+        } else if (error.message && error.message.includes('rate limit')) {
+          console.error(`OpenAI rate limit exceeded for pair ${pair._id}. Please wait a moment and try again.`);
+        }
       }
     }
 
