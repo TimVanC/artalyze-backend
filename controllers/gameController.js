@@ -2,10 +2,17 @@ const User = require('../models/User');
 const ImagePair = require('../models/ImagePair');
 const Stats = require('../models/Stats');
 const { getTodayInEST, getYesterdayInEST } = require('../utils/dateUtils');
+const mongoose = require('mongoose');
+
+// Dynamically select collection name based on environment
+const collectionName = process.env.NODE_ENV === "staging" ? "staging_imagePairs" : "imagePairs";
+const ImagePairCollection = mongoose.model(collectionName, ImagePair.schema);
 
 // Get today's puzzle pairs
 exports.getDailyPuzzle = async (req, res) => {
   try {
+    console.log('Fetching daily puzzle from collection:', collectionName);
+    
     // Get current date in UTC and set to start/end of day EST
     const startOfDay = new Date();
     startOfDay.setUTCHours(5, 0, 0, 0); // 5 AM UTC = midnight EST
@@ -16,7 +23,7 @@ exports.getDailyPuzzle = async (req, res) => {
     console.log('Searching for pairs between:', startOfDay, 'and', endOfDay);
 
     // Find today's pairs using date range
-    const todaysPairs = await ImagePair.findOne({
+    const todaysPairs = await ImagePairCollection.findOne({
       scheduledDate: { 
         $gte: startOfDay,
         $lte: endOfDay
