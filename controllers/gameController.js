@@ -20,7 +20,7 @@ exports.getDailyPuzzle = async (req, res) => {
     const endOfDay = new Date(startOfDay);
     endOfDay.setUTCHours(28, 59, 59, 999); // Next day 4:59:59 AM UTC = 11:59:59 PM EST
 
-    console.log('Searching for pairs between:', startOfDay, 'and', endOfDay);
+    console.log('Searching for pairs between:', startOfDay.toISOString(), 'and', endOfDay.toISOString());
 
     // Find today's pairs using date range
     const todaysPairs = await ImagePairCollection.findOne({
@@ -30,6 +30,9 @@ exports.getDailyPuzzle = async (req, res) => {
       },
       'pairs.0': { $exists: true } // Ensure there are completed pairs
     });
+
+    console.log('Database query result:', todaysPairs ? 'Found document' : 'No document found');
+    console.log('Number of pairs found:', todaysPairs?.pairs?.length || 0);
 
     if (!todaysPairs || !todaysPairs.pairs.length) {
       console.log('No pairs found for today');
@@ -46,6 +49,9 @@ exports.getDailyPuzzle = async (req, res) => {
       humanImageURL: pair.humanImageURL,
       aiImageURL: pair.aiImageURL
     }));
+
+    console.log('Sending response with', puzzles.length, 'pairs');
+    console.log('Response data:', { imagePairs: puzzles });
 
     res.json({ imagePairs: puzzles });
   } catch (error) {
